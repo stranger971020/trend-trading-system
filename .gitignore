@@ -1,0 +1,10 @@
+config.py
+data_storage/
+logs/
+*.db
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.reports/
