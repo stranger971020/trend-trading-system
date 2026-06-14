@@ -15,6 +15,7 @@ A股趋势交易系统 - 主入口
 
 import logging
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -578,6 +579,15 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     print("=" * 60)
     if html_path:
         print(f"📄 HTML 报告: {html_path}")
+
+        # 自动推送报告到 GitHub
+        if not dry_run:
+            try:
+                _git_push_reports(report_date)
+                logger.info("报告已推送到 GitHub")
+            except Exception as e:
+                logger.warning("GitHub 推送失败（不影响报告生成）: %s", e)
+
     print()
 
     # ========================================================
@@ -636,6 +646,42 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
 # ============================================================
 # CLI 入口
 # ============================================================
+
+def _git_push_reports(report_date: str) -> None:
+    """自动推送 reports/ 目录到 GitHub。"""
+    project_root = os.path.dirname(os.path.abspath(__file__))
+
+    try:
+        # stage reports
+        subprocess.run(
+            ["git", "add", "reports/"],
+            cwd=project_root, capture_output=True, timeout=15,
+        )
+
+        # check if there are changes
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=project_root, capture_output=True, timeout=10,
+        )
+        if result.returncode == 0:
+            return  # no changes
+
+        # commit
+        subprocess.run(
+            ["git", "commit", "-m", f"📊 日报更新 {report_date}"],
+            cwd=project_root, capture_output=True, timeout=15,
+        )
+
+        # push
+        subprocess.run(
+            ["git", "push", "origin", "main"],
+            cwd=project_root, capture_output=True, timeout=30,
+        )
+        logger.info("✅ GitHub 推送成功")
+
+    except Exception as e:
+        logger.warning("Git push 异常: %s", e)
+
 
 if __name__ == "__main__":
     force = "--force" in sys.argv
