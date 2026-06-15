@@ -373,7 +373,9 @@ def generate_html_report(
 
     # 判断数据新鲜度（2个交易日内算新鲜）
     freshness_class = "fresh"
-    freshness_text = f"数据: {latest_date}"
+    l3d = data_summary.get("l3_latest_date", "N/A")
+    sd = data_summary.get("stock_latest_date", "N/A")
+    freshness_text = f"行业: {latest_date} | L3: {l3d} | 个股: {sd}"
     try:
         data_dt = datetime.strptime(str(latest_date), "%Y%m%d").date()
         days_behind = (now.date() - data_dt).days
@@ -412,7 +414,8 @@ def generate_html_report(
     parts.append(_build_executive_summary(sentiment_result, l3_leading_result))
 
     # === 一、大盘研判 ===
-    parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与趋势</div>""")
+    l1_date = data_summary.get("latest_date", "N/A")
+    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与趋势 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l1_date})</span></div>""")
     parts.append(_build_module1(sentiment_result, persistence_result))
     parts.append(_build_module2(persistence_result))
 
@@ -421,13 +424,16 @@ def generate_html_report(
 
     # === 二、投资方向 ===
     if l3_leading_result is not None:
-        parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万三级行业 · ETF/赛道选择</div>""")
+        l3_date = data_summary.get("l3_latest_date", "N/A")
+        parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万三级行业 · ETF/赛道选择 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l3_date})</span></div>""")
         parts.append(_build_module0(l3_leading_result))
         if l3_persistence_result is not None and l3_persistence_result.get("status") == "success":
             parts.append(_build_l3_direction(l3_leading_result, l3_persistence_result))
 
     # === 三、个股精选 ===
-    parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">三、个股精选 — 从强势三级行业中优选（已排除银行/非银金融）</div>""")
+    stock_date = data_summary.get("stock_latest_date", "N/A")
+    mf_date = data_summary.get("moneyflow_latest_date", "N/A")
+    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">三、个股精选 — 从强势三级行业中优选（已排除银行/非银金融） <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股: {stock_date} | 资金流: {mf_date})</span></div>""")
     parts.append(_build_module3(stock_result))
 
     # === 风控汇总 ===

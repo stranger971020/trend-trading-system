@@ -135,6 +135,10 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     }
     data_summary = {
         "latest_date": "N/A",
+        "l3_latest_date": "N/A",
+        "stock_latest_date": "N/A",
+        "moneyflow_latest_date": "N/A",
+        "margin_latest_date": "N/A",
         "industries_updated": 0,
         "total_rows": 0,
         "new_rows": 0,
@@ -281,6 +285,8 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
 
         l3_daily_df = load_l3_daily(DB_PATH)
         logger.info("加载 %d 条 L3 日线数据", len(l3_daily_df))
+        if not l3_daily_df.empty:
+            data_summary["l3_latest_date"] = str(l3_daily_df["trade_date"].max())
 
         # ---- 模块0: 三级领先信号 ----
         logger.info("执行模块0: 三级行业领先信号...")
@@ -306,6 +312,7 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     logger.info("执行模块3: 个股挖掘")
 
     stock_mapping = None
+    stock_daily_df = None  # 确保变量始终定义
     stock_summary = {"fetched": 0, "updated": 0, "new_rows": 0}
 
     try:
@@ -344,10 +351,8 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
                     all_target_stocks.extend(sorted(codes)[:30])
                 stock_daily_df = load_stock_daily(DB_PATH, all_target_stocks)
                 logger.info("加载 %d 只个股的日线数据", len(stock_daily_df[COL_TS_CODE].unique()) if not stock_daily_df.empty else 0)
-            else:
-                stock_daily_df = None
-        else:
-            stock_daily_df = None
+
+        # 统一提取个股最新日期（在后面的日期汇总步骤中处理）
 
         # 7f. 执行选股分析（优先 L3，回退 L1）
         # 先尝试 L3 选股
@@ -435,6 +440,20 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
 
     data_summary["crowding_count"] = len(crowding_result.get("crowded_industries", [])) if crowding_result else 0
 
+    # ---- 统一提取各数据源最新日期 ----
+    try:
+        import sqlite3 as _sql
+        _c = _sql.connect(DB_PATH)
+        for _tbl, _key in [("stock_daily", "stock_latest_date"),
+                            ("moneyflow_cache", "moneyflow_latest_date"),
+                            ("margin_cache", "margin_latest_date")]:
+            _r = _c.execute(f"SELECT MAX(trade_date) FROM {_tbl}").fetchone()
+            if _r and _r[0] and data_summary.get(_key) in (None, "N/A"):
+                data_summary[_key] = str(_r[0])
+        _c.close()
+    except Exception:
+        pass
+
     # ========================================================
     # 7h. 增强数据源（第五阶段）
     # ========================================================
@@ -454,6 +473,17 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
                 stock_result["stocks"], moneyflow_result
             )
         module_status["moneyflow"] = "success"
+        # 提取资金流最新日期
+        try:
+            import sqlite3
+            mf_conn = sqlite3.connect(DB_PATH)
+            cur = mf_conn.execute("SELECT MAX(trade_date) FROM moneyflow_cache")
+            row = cur.fetchone()
+            if row and row[0]:
+                data_summary["moneyflow_latest_date"] = str(row[0])
+            mf_conn.close()
+        except Exception:
+            pass
     except Exception as e:
         logger.error("资金流失败: %s", e)
         module_status["moneyflow"] = "failed"
@@ -496,6 +526,16 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         fetch_today_margin()
         margin_divergences = detect_margin_divergence(daily_df, stock_mapping)
         module_status["margin"] = "success"
+        try:
+            import sqlite3
+            mg_conn = sqlite3.connect(DB_PATH)
+            cur = mg_conn.execute("SELECT MAX(trade_date) FROM margin_cache")
+            row = cur.fetchone()
+            if row and row[0]:
+                data_summary["margin_latest_date"] = str(row[0])
+            mg_conn.close()
+        except Exception:
+            pass
     except Exception as e:
         logger.error("融资背离失败: %s", e)
         module_status["margin"] = "failed"
