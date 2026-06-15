@@ -669,7 +669,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         logger.info("Telegram 推送...")
         # 附加 GitHub 报告链接
         report_filename = f"report_{report_date}_{time_slot}.html"
-        github_url = f"https://github.com/stranger971020/trend-trading-system/blob/main/reports/{report_filename}"
+        github_url = f"https://stranger971020.github.io/trend-trading-system/reports/{report_filename}"
         report_text_with_link = report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
 
         try:
