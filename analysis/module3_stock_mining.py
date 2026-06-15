@@ -25,6 +25,10 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
+# 不选股的 L1 行业（保留在板块分析中，但不纳入个股推荐）
+EXCLUDED_L1_CODES = {"801780.SI", "801790.SI"}  # 银行, 非银金融
+EXCLUDED_L1_NAMES = {"银行", "非银金融"}
+
 
 # ============================================================
 # 个股评分计算
@@ -255,6 +259,9 @@ def analyze_stocks(
                 by_industry[ind_name or l1_code] = industry_picks
 
         # 全局排序
+        # 排除券商银行
+        all_picks = [p for p in all_picks if p.get("industry_code") not in EXCLUDED_L1_CODES]
+        by_industry = {k: v for k, v in by_industry.items() if k not in EXCLUDED_L1_NAMES}
         all_picks.sort(key=lambda x: x["score"], reverse=True)
 
         result["stocks"] = all_picks
@@ -429,6 +436,9 @@ def analyze_stocks_l3(
             if industry_picks:
                 by_industry[l3_name] = industry_picks
 
+        # 排除券商银行
+        all_picks = [p for p in all_picks if p.get("industry_code") not in EXCLUDED_L1_CODES]
+        by_industry = {k: v for k, v in by_industry.items() if k not in EXCLUDED_L1_NAMES}
         all_picks.sort(key=lambda x: x["score"], reverse=True)
         result["stocks"] = all_picks
         result["by_industry"] = by_industry

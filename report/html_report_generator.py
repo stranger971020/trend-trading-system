@@ -411,20 +411,26 @@ def generate_html_report(
     # ---- Executive Summary ----
     parts.append(_build_executive_summary(sentiment_result, l3_leading_result))
 
-    # ---- Module 1: Market Sentiment ----
+    # === 一、大盘研判 ===
+    parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与趋势</div>""")
     parts.append(_build_module1(sentiment_result, persistence_result))
-
-    # ---- Module 0: L3 Leading Signals ----
-    if l3_leading_result is not None:
-        parts.append(_build_module0(l3_leading_result))
-
-    # ---- Module 2: Sector Persistence ----
     parts.append(_build_module2(persistence_result))
 
-    # ---- Module 3: Stock Picks ----
+    # === 持续性量化参考 ===
+    parts.append(_build_persistence_legend())
+
+    # === 二、投资方向 ===
+    if l3_leading_result is not None:
+        parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万三级行业 · ETF/赛道选择</div>""")
+        parts.append(_build_module0(l3_leading_result))
+        if l3_persistence_result is not None and l3_persistence_result.get("status") == "success":
+            parts.append(_build_l3_direction(l3_leading_result, l3_persistence_result))
+
+    # === 三、个股精选 ===
+    parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">三、个股精选 — 从强势三级行业中优选（已排除银行/非银金融）</div>""")
     parts.append(_build_module3(stock_result))
 
-    # ---- Module 4: Risk Management ----
+    # === 风控汇总 ===
     if regime_result or crowding_result:
         parts.append(_build_risk_section(regime_result, crowding_result, portfolio_result, anomaly_result))
 
@@ -664,6 +670,110 @@ def _build_module0(l3_leading_result: dict) -> str:
   <p style="font-size:0.78rem;color:#94a3b8;margin-top:8px;">
     📊 共 {len(df)} 个三级行业参评。超额动量 = L3_20日收益 − 所属L1_20日收益
   </p>
+</div>
+"""
+
+
+def _build_persistence_legend() -> str:
+    """持续性量化参考卡。
+
+    基于 2000-2026 全部 L1 行业历史数据回测。
+    """
+    return """
+<div class="section" style="background:linear-gradient(135deg,#f0fdf4,#fef3c7,#fef2f2);">
+  <div class="section-title">📐 持续性量化参考</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:.82rem;">
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #16a34a;">
+      <b style="color:#16a34a;">🔥 高持续性 (≥7.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#16a34a;">+2.90%</b><br>
+        胜率 <b>60%</b> · 适合重仓参与
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #d97706;">
+      <b style="color:#d97706;">⚡ 中等持续性 (5.0-7.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#d97706;">+0.65%</b><br>
+        胜率 <b>51%</b> · 轻仓试探或观望
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #dc2626;">
+      <b style="color:#dc2626;">⚠️ 低持续性 (<5.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#dc2626;">+0.34%</b><br>
+        胜率 <b>50%</b> · 随机游走，建议回避
+      </div>
+    </div>
+  </div>
+  <p style="font-size:.72rem;color:#94a3b8;margin-top:8px;">📊 基于 2000-2026 年 31 个申万 L1 行业历史数据回测 | 买点信号: 持续性从低→中突破时</p>
+</div>
+"""
+
+
+def _build_l3_direction(l3_leading: dict, l3_persistence: dict) -> str:
+    """构建 L3 投资方向：按 L1 父级分组展示强势 L3。"""
+    pdf = l3_persistence.get("df")
+    ldf = l3_leading.get("df")
+
+    if pdf is None or pdf.empty:
+        return ""
+
+    # 只展示中等持续性以上的 L3
+    from config import MEDIUM_PERSISTENCE
+    strong_l3 = pdf[pdf["persistence_score"] >= MEDIUM_PERSISTENCE].head(30)
+
+    # 按 L1 父级分组 (从 L3 leading 数据中查找 parent)
+    l3_to_parent = {}
+    if ldf is not None and not ldf.empty:
+        for _, row in ldf.iterrows():
+            l3_to_parent[row["l3_code"]] = row.get("parent_name", "")
+
+    # 手工分组
+    groups: dict[str, list] = {}
+    for _, row in strong_l3.iterrows():
+        code = row["ts_code"]
+        name = row["name"]
+        score = row["persistence_score"]
+        parent = l3_to_parent.get(code, "其他")
+        if parent not in groups:
+            groups[parent] = []
+        groups[parent].append((name, score, code))
+
+    if not groups:
+        return ""
+
+    cards = ""
+    for parent_name, items in sorted(groups.items(), key=lambda x: -max(s for _, s, _ in x[1])):
+        if not parent_name:
+            continue
+        item_html = ""
+        for name, score, code in items[:8]:
+            bar_w = int(score / 10 * 120)
+            color = _color_for_score(score)
+            item_html += (
+                f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.8rem;">'
+                f'<span style="min-width:80px;text-align:right;color:#475569;">{name}</span>'
+                f'<span style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;">'
+                f'<span style="display:block;height:100%;width:{bar_w}px;background:{color};border-radius:3px;"></span></span>'
+                f'<span style="font-weight:600;min-width:36px;">{score:.1f}</span>'
+                f'</div>'
+            )
+        cards += (
+            f'<div style="background:#fff;border-radius:8px;padding:12px;border-left:4px solid {_color_for_score(max(s for _,s,_ in items))};">'
+            f'<b style="font-size:.9rem;">📌 {parent_name}</b>'
+            f'{item_html}'
+            f'</div>'
+        )
+
+    return f"""
+<div class="section">
+  <div class="section-title">🎯 L3 投资方向（按一级行业分组）</div>
+  <p style="font-size:.82rem;color:#64748b;margin-bottom:12px;">
+    展示各一级行业下属的三级子行业持续性得分。高分三级行业 = ETF/赛道投资方向。
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+    {cards}
+  </div>
 </div>
 """
 
