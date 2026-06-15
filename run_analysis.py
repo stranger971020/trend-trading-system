@@ -51,6 +51,7 @@ from data.stock_industry_mapping import (
 )
 from data.stock_daily_updater import (
     update_stocks_for_industries,
+    fetch_all_stocks,
     load_stock_daily,
 )
 from data.l3_industry_updater import (
@@ -306,13 +307,13 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         module_status["module2_l3"] = "failed"
 
     # ========================================================
-    # 7. 模块3: 个股挖掘（L1 + L3 双轨）
+    # 7. 模块3: 个股挖掘（L3 选股，按需拉取数据）
     # ========================================================
     logger.info("=" * 40)
     logger.info("执行模块3: 个股挖掘")
 
     stock_mapping = None
-    stock_daily_df = None  # 确保变量始终定义
+    stock_daily_df = None
     stock_summary = {"fetched": 0, "updated": 0, "new_rows": 0}
 
     try:
@@ -321,41 +322,18 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         stock_mapping = load_stock_industry_mapping()
         logger.info("已加载 %d 只个股的行业映射", len(stock_mapping))
 
-        # 7b. 确定目标行业（中等持续性以上）
-        if persistence_result.get("status") == "success":
-            persistence_df = persistence_result.get("df")
-            if persistence_df is not None and not persistence_df.empty:
-                from config import MEDIUM_PERSISTENCE
-                target_df = persistence_df[
-                    persistence_df["persistence_score"] >= MEDIUM_PERSISTENCE
-                ]
-                target_codes = set(target_df["ts_code"].tolist())
-                logger.info("目标行业: %d 个（持续性>=%.0f）", len(target_codes), MEDIUM_PERSISTENCE)
+        # 7b. 全量拉取所有个股日线数据（首次~18分钟，后续增量~30秒）
+        all_stock_codes = sorted(stock_mapping.keys())
+        stock_summary = fetch_all_stocks(DB_PATH, all_stock_codes)
+        data_summary["stocks_fetched"] = stock_summary.get("total_stocks", 0)
+        data_summary["stocks_updated"] = stock_summary.get("updated", 0)
+        data_summary["stocks_new_rows"] = stock_summary.get("new_rows", 0)
 
-                # 7c. 获取目标行业的成分股分组
-                industry_stocks = get_stocks_by_industry(stock_mapping, target_codes)
-                total_target_stocks = sum(len(v) for v in industry_stocks.values())
-                logger.info(
-                    "目标行业共 %d 只成分股（每行业最多取前30只）",
-                    total_target_stocks,
-                )
+        # 7c. 加载全量个股数据
+        stock_daily_df = load_stock_daily(DB_PATH, all_stock_codes, min_rows=20)
+        logger.info("加载 %d 只个股日线", len(stock_daily_df[COL_TS_CODE].unique()) if not stock_daily_df.empty else 0)
 
-                # 7d. 更新个股日线数据（首次拉取全量，后续增量）
-                stock_summary = update_stocks_for_industries(
-                    DB_PATH, industry_stocks, recent_only=False
-                )
-
-                # 7e. 加载个股日线数据
-                all_target_stocks = []
-                for codes in industry_stocks.values():
-                    all_target_stocks.extend(sorted(codes)[:30])
-                stock_daily_df = load_stock_daily(DB_PATH, all_target_stocks)
-                logger.info("加载 %d 只个股的日线数据", len(stock_daily_df[COL_TS_CODE].unique()) if not stock_daily_df.empty else 0)
-
-        # 统一提取个股最新日期（在后面的日期汇总步骤中处理）
-
-        # 7f. 执行选股分析（优先 L3，回退 L1）
-        # 先尝试 L3 选股
+        # 7d. 执行 L3 选股（或回退 L1）
         if l3_daily_df is not None and not l3_daily_df.empty and \
            l3_persistence_result is not None and l3_persistence_result.get("status") == "success":
             stock_result = analyze_stocks_l3(
@@ -364,9 +342,8 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
                 l3_persistence_result=l3_persistence_result,
                 stock_mapping=stock_mapping,
             )
-            logger.info("模块3: 使用 L3 选股模式")
+            logger.info("模块3: L3 选股模式")
         else:
-            # 回退到 L1 选股
             stock_result = analyze_stocks(
                 stock_daily_df=stock_daily_df,
                 industry_daily_df=daily_df,
@@ -374,12 +351,9 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
                 stock_mapping=stock_mapping,
                 industry_mapping=mapping,
             )
-            logger.info("模块3: 回退到 L1 选股模式")
+            logger.info("模块3: L1 选股模式")
 
         module_status["module3"] = stock_result.get("status", "skipped")
-        data_summary["stocks_fetched"] = stock_summary.get("total_stocks", 0)
-        data_summary["stocks_updated"] = stock_summary.get("updated", 0)
-        data_summary["stocks_new_rows"] = stock_summary.get("new_rows", 0)
 
     except Exception as e:
         logger.error("模块3异常: %s", e, exc_info=True)

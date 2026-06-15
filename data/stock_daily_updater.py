@@ -232,6 +232,69 @@ def update_stocks_for_industries(
     return result
 
 
+def fetch_all_stocks(
+    db_path: str,
+    stock_codes: list[str],
+) -> dict:
+    """全量拉取所有个股日线数据（首次慢，后续增量快）。
+
+    Args:
+        db_path: 数据库路径
+        stock_codes: 全部需要拉取的股票代码（如 3000 只）
+
+    Returns:
+        {"total_stocks": N, "updated": M, "new_rows": R}
+    """
+    init_stock_table(db_path)
+    conn = sqlite3.connect(db_path)
+    end_date = _beijing_date_str()
+
+    total_new_rows = 0
+    updated_stocks = 0
+
+    for idx, ts_code in enumerate(stock_codes):
+        existing = _get_existing_dates(conn, ts_code)
+        if existing:
+            latest = max(existing)
+            start_dt = datetime.strptime(latest, "%Y%m%d") + timedelta(days=1)
+            start_date = start_dt.strftime("%Y%m%d")
+        else:
+            start_dt = datetime.strptime(end_date, "%Y%m%d") - timedelta(days=int(STOCK_INITIAL_FETCH_DAYS * 1.6))
+            start_date = start_dt.strftime("%Y%m%d")
+
+        if start_date > end_date:
+            continue
+
+        df = fetch_stock_daily(ts_code, start_date, end_date)
+        if df is not None and not df.empty:
+            df["trade_date"] = df["trade_date"].astype(str)
+            df_new = df[~df["trade_date"].isin(existing)]
+            if not df_new.empty:
+                cols = ["ts_code", "trade_date", "open", "high", "low", "close", "pre_close", "pct_chg", "vol", "amount"]
+                df_write = df_new[cols].copy()
+                try:
+                    df_write.to_sql("stock_daily", conn, if_exists="append", index=False)
+                except Exception:
+                    placeholders = ", ".join(["?" for _ in cols])
+                    sql = f"INSERT OR IGNORE INTO stock_daily ({', '.join(cols)}) VALUES ({placeholders})"
+                    for _, row in df_write.iterrows():
+                        conn.execute(sql, [row[c] for c in cols])
+                conn.commit()
+                total_new_rows += len(df_new)
+                updated_stocks += 1
+
+        if (idx + 1) % 100 == 0:
+            pct = (idx + 1) / len(stock_codes) * 100
+            logger.info("  全量进度: %d/%d (%.0f%%), +%d 条", idx + 1, len(stock_codes), pct, total_new_rows)
+
+        time.sleep(STOCK_API_RATE_LIMIT)
+
+    conn.close()
+    result = {"total_stocks": len(stock_codes), "updated": updated_stocks, "new_rows": total_new_rows}
+    logger.info("全量个股: %d 只, %d 更新, +%d 条", len(stock_codes), updated_stocks, total_new_rows)
+    return result
+
+
 def load_stock_daily(
     db_path: str,
     stock_codes: list[str],
