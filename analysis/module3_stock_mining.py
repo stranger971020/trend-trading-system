@@ -25,9 +25,9 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-# 不选股的 L1 行业（保留在板块分析中，但不纳入个股推荐）
-EXCLUDED_L1_CODES = {"801780.SI", "801790.SI"}  # 银行, 非银金融
-EXCLUDED_L1_NAMES = {"银行", "非银金融"}
+# 不选股的行业（保留在板块分析中，但不纳入个股推荐）
+EXCLUDED_KEYWORDS = ["银行", "证券", "保险", "城商行", "金融", "信托", "期货"]
+TOP_N_INDUSTRIES = 7  # 从持续性排名前 N 的行业中选股
 
 
 # ============================================================
@@ -137,22 +137,19 @@ def analyze_stocks(
             result["reason"] = "持续性评分为空"
             return result
 
-        # 取高持续性 + 中等持续性行业
-        target = persistence_df[
-            persistence_df["persistence_score"] >= MEDIUM_PERSISTENCE
-        ]
+        # 取持续性排名前 TOP_N_INDUSTRIES 的行业
+        target = persistence_df.nlargest(TOP_N_INDUSTRIES, "persistence_score")
         if target.empty:
             result["status"] = "degraded"
-            result["reason"] = f"无行业达到中等持续性以上（阈值={MEDIUM_PERSISTENCE}）"
-            logger.info("模块3: %s", result["reason"])
+            result["reason"] = f"持续性评分为空"
             return result
 
         target_codes = set(target["ts_code"].tolist())
         logger.info(
-            "模块3: 目标行业 %d 个（高:%d 中:%d）",
+            "模块3: Top-%d 行业（持续性 %.2f ~ %.2f）",
             len(target_codes),
-            (target["persistence_score"] >= HIGH_PERSISTENCE).sum(),
-            ((target["persistence_score"] >= MEDIUM_PERSISTENCE) & (target["persistence_score"] < HIGH_PERSISTENCE)).sum(),
+            target["persistence_score"].max(),
+            target["persistence_score"].min(),
         )
 
         # ---- 构建行业指数 ----
@@ -259,9 +256,11 @@ def analyze_stocks(
                 by_industry[ind_name or l1_code] = industry_picks
 
         # 全局排序
-        # 排除券商银行
-        all_picks = [p for p in all_picks if p.get("industry_code") not in EXCLUDED_L1_CODES]
-        by_industry = {k: v for k, v in by_industry.items() if k not in EXCLUDED_L1_NAMES}
+        # 排除金融类个股（按行业名称关键词过滤）
+        def _is_financial(name: str) -> bool:
+            return any(kw in name for kw in EXCLUDED_KEYWORDS)
+        all_picks = [p for p in all_picks if not _is_financial(p.get("industry", ""))]
+        by_industry = {k: v for k, v in by_industry.items() if not _is_financial(k)}
         all_picks.sort(key=lambda x: x["score"], reverse=True)
 
         result["stocks"] = all_picks
@@ -333,14 +332,14 @@ def analyze_stocks_l3(
             result["reason"] = "L3 持续性评分为空"
             return result
 
-        target = l3_df[l3_df["persistence_score"] >= MEDIUM_PERSISTENCE]
+        target = l3_df.nlargest(TOP_N_INDUSTRIES, "persistence_score")
         if target.empty:
             result["status"] = "degraded"
-            result["reason"] = f"无 L3 行业达到中等持续性以上"
+            result["reason"] = "L3 持续性评分为空"
             return result
 
         target_codes = set(target["ts_code"].tolist())
-        logger.info("模块3(L3): 目标 L3 行业 %d 个", len(target_codes))
+        logger.info("模块3(L3): Top-%d L3 行业", len(target_codes))
 
         # 构建 L3 行业价格索引
         l3_prices_map = {}
@@ -436,9 +435,11 @@ def analyze_stocks_l3(
             if industry_picks:
                 by_industry[l3_name] = industry_picks
 
-        # 排除券商银行
-        all_picks = [p for p in all_picks if p.get("industry_code") not in EXCLUDED_L1_CODES]
-        by_industry = {k: v for k, v in by_industry.items() if k not in EXCLUDED_L1_NAMES}
+        # 排除金融类个股（按行业名称关键词过滤）
+        def _is_financial(name: str) -> bool:
+            return any(kw in name for kw in EXCLUDED_KEYWORDS)
+        all_picks = [p for p in all_picks if not _is_financial(p.get("industry", ""))]
+        by_industry = {k: v for k, v in by_industry.items() if not _is_financial(k)}
         all_picks.sort(key=lambda x: x["score"], reverse=True)
         result["stocks"] = all_picks
         result["by_industry"] = by_industry

@@ -942,8 +942,8 @@ def _build_module3(stock_result: dict) -> str:
 <div class="section">
   <div class="section-title">🎯 模块3: 个股精选</div>
   <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px;">
-    从 {len(by_industry)} 个中等持续性以上行业中精选 {len(stocks)} 只个股
-    （评分 = 超额收益×50% + 5日动量×30% + MA20偏离×20%）
+    从持续性 Top-{min(7, len(by_industry))} 行业中精选 {len(stocks)} 只个股
+    （已排除银行/证券/保险类，评分 = 超额收益×50% + 5日动量×30% + MA20偏离×20%）
   </p>
   <div class="stock-grid">
     {cards_html}
