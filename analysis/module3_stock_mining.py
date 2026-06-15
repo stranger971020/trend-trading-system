@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 # 不选股的行业（保留在板块分析中，但不纳入个股推荐）
 EXCLUDED_KEYWORDS = ["银行", "证券", "保险", "城商行", "金融", "信托", "期货"]
-TOP_N_INDUSTRIES = 7  # 从持续性排名前 N 的行业中选股
+TOP_N_INDUSTRIES = 7       # 从持续性排名前 N 的行业中选股
+MIN_L3_STOCKS = 8          # L3 行业最少成分股数（过滤微型行业）
 
 
 # ============================================================
@@ -332,10 +333,24 @@ def analyze_stocks_l3(
             result["reason"] = "L3 持续性评分为空"
             return result
 
-        target = l3_df.nlargest(TOP_N_INDUSTRIES, "persistence_score")
+        # 过滤微型行业（成分股太少）
+        l3_stock_counts = {}
+        if stock_mapping:
+            for info in stock_mapping.values():
+                l3c = info.get("l3_code", "")
+                l3_stock_counts[l3c] = l3_stock_counts.get(l3c, 0) + 1
+
+        l3_df_filtered = l3_df.copy()
+        if l3_stock_counts:
+            valid_codes = {c for c, n in l3_stock_counts.items() if n >= MIN_L3_STOCKS}
+            before = len(l3_df_filtered)
+            l3_df_filtered = l3_df_filtered[l3_df_filtered["ts_code"].isin(valid_codes)]
+            logger.info("L3 过滤: %d → %d (>=%d只成分股)", before, len(l3_df_filtered), MIN_L3_STOCKS)
+
+        target = l3_df_filtered.nlargest(TOP_N_INDUSTRIES, "persistence_score")
         if target.empty:
             result["status"] = "degraded"
-            result["reason"] = "L3 持续性评分为空"
+            result["reason"] = f"无符合条件的 L3 行业（>=%d只成分股）" % MIN_L3_STOCKS
             return result
 
         target_codes = set(target["ts_code"].tolist())
@@ -452,4 +467,88 @@ def analyze_stocks_l3(
         result["status"] = "failed"
         result["error"] = str(e)
 
+    return result
+
+
+def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_result=None, stock_mapping=None):
+    """从持续性 Top-7 L2 行业中精选个股（L2 版本）。
+
+    与 analyze_stocks_l3 逻辑相同，但使用 l2_code 而非 l3_code。
+    """
+    result = {"status": "skipped", "stocks": [], "by_industry": {}, "error": None}
+    if l2_persistence_result is None or l2_persistence_result.get("status") != "success":
+        result["reason"] = "L2 持续性分析不可用"; return result
+    if stock_daily_df is None or stock_daily_df.empty:
+        result["reason"] = "个股数据为空"; return result
+    if l2_daily_df is None or l2_daily_df.empty:
+        result["reason"] = "L2 数据为空"; return result
+    if stock_mapping is None:
+        result["reason"] = "映射为空"; return result
+    try:
+        l2df = l2_persistence_result.get("df")
+        if l2df is None or l2df.empty: result["reason"] = "L2 持续性为空"; return result
+        # 过滤微型行业
+        l2_stock_counts = {}
+        for info in stock_mapping.values():
+            l2c = info.get("l2_code", "")
+            l2_stock_counts[l2c] = l2_stock_counts.get(l2c, 0) + 1
+        valid_codes = {c for c, n in l2_stock_counts.items() if n >= MIN_L3_STOCKS}
+        l2df = l2df[l2df["ts_code"].isin(valid_codes)]
+        target = l2df.nlargest(TOP_N_INDUSTRIES, "persistence_score")
+        if target.empty: result["status"] = "degraded"; result["reason"] = "无符合条件的L2行业"; return result
+        target_codes = set(target["ts_code"].tolist())
+        logger.info("模块3(L2): Top-%d L2 行业", len(target_codes))
+        l2_prices_map = {}
+        for code in target_codes:
+            grp = l2_daily_df[l2_daily_df["ts_code"] == code].sort_values("trade_date")
+            if not grp.empty and len(grp) >= MOMENTUM_LOOKBACK + 1:
+                l2_prices_map[code] = grp["close"]
+        w = STOCK_SCORE_WEIGHTS
+        all_picks = []; by_industry = {}
+        for l2_code in sorted(target_codes):
+            industry_stocks = [c for c, info in stock_mapping.items() if info.get("l2_code") == l2_code]
+            if not industry_stocks: continue
+            stock_group = stock_daily_df[stock_daily_df["ts_code"].isin(industry_stocks)]
+            if stock_group.empty: continue
+            l2_prices = l2_prices_map.get(l2_code)
+            if l2_prices is None: continue
+            l2_name = str(l2_daily_df[l2_daily_df["ts_code"] == l2_code]["name"].iloc[0]) if not l2_daily_df[l2_daily_df["ts_code"] == l2_code].empty else l2_code
+            stock_scores = []
+            for ts_code in stock_group["ts_code"].unique():
+                sdf = stock_group[stock_group["ts_code"] == ts_code].sort_values("trade_date")
+                if len(sdf) < MOMENTUM_LOOKBACK + 1: continue
+                prices = sdf["close"]
+                excess = compute_excess_return(prices, l2_prices)
+                mom5d = compute_momentum_5d(prices)
+                ma20dev = compute_ma20_deviation(prices)
+                stock_scores.append({"ts_code": ts_code, "excess_return": excess, "momentum_5d": mom5d, "ma20_deviation": ma20dev})
+            if not stock_scores: continue
+            sdf2 = pd.DataFrame(stock_scores)
+            sdf2["excess_score"] = _minmax_normalize(sdf2["excess_return"])
+            sdf2["momentum_score"] = _minmax_normalize(sdf2["momentum_5d"])
+            sdf2["ma20_score"] = _minmax_normalize(sdf2["ma20_deviation"])
+            sdf2["total_score"] = sdf2["excess_score"]*w["excess_return"] + sdf2["momentum_score"]*w["momentum_5d"] + sdf2["ma20_score"]*w["ma20_deviation"]
+            sdf2 = sdf2.sort_values("total_score", ascending=False)
+            top_n = sdf2.head(MODULE3_TOP_N)
+            industry_picks = []
+            for _, row in top_n.iterrows():
+                ts_code = row["ts_code"]
+                stock_name = stock_mapping[ts_code].get("stock_name", ts_code) if ts_code in stock_mapping else ts_code
+                pick = {"ts_code": ts_code, "name": stock_name, "score": round(float(row["total_score"]), 2),
+                        "excess_return": round(float(row["excess_return"]), 2),
+                        "momentum_5d": round(float(row["momentum_5d"]), 2),
+                        "ma20_deviation": round(float(row["ma20_deviation"]), 2),
+                        "industry": l2_name, "industry_code": l2_code}
+                industry_picks.append(pick); all_picks.append(pick)
+            if industry_picks: by_industry[l2_name] = industry_picks
+        # 过滤金融
+        def _fin(n): return any(kw in n for kw in EXCLUDED_KEYWORDS)
+        all_picks = [p for p in all_picks if not _fin(p.get("industry", ""))]
+        by_industry = {k: v for k, v in by_industry.items() if not _fin(k)}
+        all_picks.sort(key=lambda x: x["score"], reverse=True)
+        result["stocks"] = all_picks; result["by_industry"] = by_industry; result["status"] = "success"
+        logger.info("模块3(L2): 从 %d 个 L2 行业选出 %d 只个股", len(by_industry), len(all_picks))
+    except Exception as e:
+        logger.error("模块3 L2 失败: %s", e, exc_info=True)
+        result["status"] = "failed"; result["error"] = str(e)
     return result

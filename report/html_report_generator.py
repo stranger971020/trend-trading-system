@@ -344,6 +344,8 @@ def generate_html_report(
     data_summary: dict,
     l3_leading_result: dict | None = None,
     l3_persistence_result: dict | None = None,
+    l2_leading_result: dict | None = None,
+    l2_persistence_result: dict | None = None,
     regime_result: dict | None = None,
     crowding_result: dict | None = None,
     portfolio_result: dict | None = None,
@@ -357,6 +359,8 @@ def generate_html_report(
         stock_result: 模块3输出
         module_status: 各模块执行状态
         data_summary: 数据摘要
+        l2_leading_result: 模块0-L2 二级行业领先信号输出
+        l2_persistence_result: 模块2 L2 持续性输出
         l3_leading_result: 模块0 L3 领先信号输出（可选）
         l3_persistence_result: 模块2 L3 持续性输出（可选）
         regime_result: 宏观状态机输出（可选）
@@ -423,12 +427,10 @@ def generate_html_report(
     parts.append(_build_persistence_legend())
 
     # === 二、投资方向 ===
-    if l3_leading_result is not None:
-        l3_date = data_summary.get("l3_latest_date", "N/A")
-        parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万三级行业 · ETF/赛道选择 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l3_date})</span></div>""")
-        parts.append(_build_module0(l3_leading_result))
-        if l3_persistence_result is not None and l3_persistence_result.get("status") == "success":
-            parts.append(_build_l3_direction(l3_leading_result, l3_persistence_result))
+    if l2_leading_result is not None:
+        l2_date = data_summary.get("l2_latest_date", data_summary.get("latest_date", "N/A"))
+        parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万二级行业 · ETF/赛道选择 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l2_date})</span></div>""")
+        parts.append(_build_l2_section(l2_leading_result, l2_persistence_result))
 
     # === 三、个股精选 ===
     stock_date = data_summary.get("stock_latest_date", "N/A")
@@ -714,6 +716,53 @@ def _build_persistence_legend() -> str:
   <p style="font-size:.72rem;color:#94a3b8;margin-top:8px;">📊 基于 2000-2026 年 31 个申万 L1 行业历史数据回测 | 买点信号: 持续性从低→中突破时</p>
 </div>
 """
+
+
+def _build_l2_section(l2_leading, l2_persistence):
+    """L2 投资方向：领先信号 + 持续性排名。"""
+    ldf = l2_leading.get("df") if l2_leading else None
+    pdf = l2_persistence.get("df") if l2_persistence else None
+
+    parts = []
+    # Leading signals
+    if ldf is not None and not ldf.empty:
+        leading_count = l2_leading.get("leading_count", 0)
+        strong = l2_leading.get("strong_leading", [])
+        top15 = ldf.head(15)
+        rows = ""
+        for _, row in top15.iterrows():
+            excess = float(row["excess_momentum"])
+            color = _color_for_score(max(0, excess + 5), 20)
+            bar_w = _bar_width(excess + 10, 30, 0)
+            rows += f'<tr><td class="rank">{int(row["rank"])}</td><td>{row["l2_name"]}</td><td style="color:#64748b;font-size:.8rem;">{row["parent_name"]}</td><td><span class="mini-bar" style="width:{bar_w}px;background:{color};"></span>{_sign(excess)}{excess:.1f}%</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+
+        strong_tags = ""
+        if strong:
+            tags = ["%s(%+.1f%%)" % (s["name"], s["excess"]) for s in strong[:10]]
+            strong_tags = "<p style='margin-bottom:8px;'><b>🔥 强烈领先:</b> " + "、".join(tags) + "</p>"
+
+        parts.append(f"""<div class="section">
+  <div class="section-title">🔍 L2 领先信号</div>
+  <p style="font-size:.85rem;color:#64748b;margin-bottom:8px;">二级行业相对其所属一级行业的超额动量排名。共 <b>{leading_count}</b> 个领先。</p>
+  {strong_tags}
+  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>所属一级</th><th>超额动量</th><th>强度</th></tr></thead><tbody>{rows}</tbody></table>
+  <p style="font-size:.78rem;color:#94a3b8;margin-top:4px;">共 {len(ldf)} 个 L2 参评</p>
+</div>""")
+
+    # Persistence
+    if pdf is not None and not pdf.empty:
+        top = pdf.head(20)
+        rows2 = ""
+        for _, row in top.iterrows():
+            ps = float(row["persistence_score"])
+            color = _color_for_score(ps)
+            rows2 += f'<tr><td class="rank">{int(row.get("rank",0))}</td><td>{row["name"]}</td><td><span class="mini-bar" style="width:{_bar_width(ps,10)}px;background:{color};"></span>{ps:.2f}</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+        parts.append(f"""<div class="section">
+  <div class="section-title">📊 L2 持续性 Top-20</div>
+  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>持续性得分</th><th>判定</th></tr></thead><tbody>{rows2}</tbody></table>
+</div>""")
+
+    return "\n".join(parts) if parts else ""
 
 
 def _build_l3_direction(l3_leading: dict, l3_persistence: dict) -> str:

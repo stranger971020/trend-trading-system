@@ -64,8 +64,10 @@ from analysis.module2_persistence import (
     analyze_persistence,
     analyze_l3_persistence,
 )
-from analysis.module3_stock_mining import analyze_stocks, analyze_stocks_l3
+from analysis.module3_stock_mining import analyze_stocks, analyze_stocks_l3, analyze_stocks_l2
 from analysis.module0_l3_leading import analyze_l3_leading
+from analysis.module0_l2_leading import analyze_l2_leading
+from data.l2_industry_updater import load_l2_mapping, fetch_and_store_l2, load_l2_daily
 from analysis.market_regime import determine_regime
 from analysis.weekly_filter import daily_to_weekly, compute_weekly_momentum, apply_weekly_filter
 from analysis.crowding_warning import detect_crowding
@@ -306,8 +308,38 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         module_status["module0"] = "failed"
         module_status["module2_l3"] = "failed"
 
+    # ---- L2 二级行业（投资方向主引擎） ----
+    l2_daily_df = None
+    l2_leading_result = None
+    l2_persistence_result = None
+    try:
+        l2_mapping = load_l2_mapping()
+        logger.info("L2 行业映射: %d 个代码", len(l2_mapping))
+        l2_summary = fetch_and_store_l2(DB_PATH, l2_mapping)
+        data_summary["l2_active"] = l2_summary["active"]
+        logger.info("L2 数据: %d 活跃, +%d 条", l2_summary["active"], l2_summary["new_rows"])
+        l2_daily_df = load_l2_daily(DB_PATH)
+        logger.info("加载 %d 条 L2 日线数据", len(l2_daily_df))
+        # L2 领先信号
+        l2_leading_result = analyze_l2_leading(l2_daily_df, daily_df)
+        module_status["module0_l2"] = l2_leading_result.get("status", "failed")
+        # L2 持续性
+        from analysis.module2_persistence import compute_persistence
+        l2_persistence_df = compute_persistence(l2_daily_df)
+        l2_persistence_result = {"status":"success","df":l2_persistence_df}
+        if not l2_persistence_df.empty:
+            l2_persistence_result["high_persistence"] = l2_persistence_df[l2_persistence_df["label"]=="🔥高持续性"]["name"].tolist()
+            l2_persistence_result["medium_persistence"] = l2_persistence_df[l2_persistence_df["label"]=="⚡中等持续性"]["name"].tolist()
+            l2_persistence_result["low_persistence"] = l2_persistence_df[l2_persistence_df["label"]=="⚠️低持续性"]["name"].tolist()
+        module_status["module2_l2"] = "success"
+        logger.info("L2 持续性: %d 行业评分完成", len(l2_persistence_df))
+    except Exception as e:
+        logger.error("L2 管线失败: %s", e, exc_info=True)
+        module_status["module0_l2"] = "failed"
+        module_status["module2_l2"] = "failed"
+
     # ========================================================
-    # 7. 模块3: 个股挖掘（L3 选股，按需拉取数据）
+    # 7. 模块3: 个股挖掘（L2 选股）
     # ========================================================
     logger.info("=" * 40)
     logger.info("执行模块3: 个股挖掘")
@@ -333,16 +365,16 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         stock_daily_df = load_stock_daily(DB_PATH, all_stock_codes, min_rows=20)
         logger.info("加载 %d 只个股日线", len(stock_daily_df[COL_TS_CODE].unique()) if not stock_daily_df.empty else 0)
 
-        # 7d. 执行 L3 选股（或回退 L1）
-        if l3_daily_df is not None and not l3_daily_df.empty and \
-           l3_persistence_result is not None and l3_persistence_result.get("status") == "success":
-            stock_result = analyze_stocks_l3(
+        # 7d. 执行 L2 选股（优先 L2，回退 L1）
+        if l2_daily_df is not None and not l2_daily_df.empty and \
+           l2_persistence_result is not None and l2_persistence_result.get("status") == "success":
+            stock_result = analyze_stocks_l2(
                 stock_daily_df=stock_daily_df,
-                l3_daily_df=l3_daily_df,
-                l3_persistence_result=l3_persistence_result,
+                l2_daily_df=l2_daily_df,
+                l2_persistence_result=l2_persistence_result,
                 stock_mapping=stock_mapping,
             )
-            logger.info("模块3: L3 选股模式")
+            logger.info("模块3: L2 选股模式")
         else:
             stock_result = analyze_stocks(
                 stock_daily_df=stock_daily_df,
@@ -569,6 +601,8 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
             data_summary=data_summary,
             l3_leading_result=l3_leading_result,
             l3_persistence_result=l3_persistence_result,
+            l2_leading_result=l2_leading_result,
+            l2_persistence_result=l2_persistence_result,
             regime_result=regime_result,
             crowding_result=crowding_result,
             portfolio_result=portfolio_result,
