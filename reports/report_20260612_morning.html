@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股趋势交易系统 · 日报 2026-06-15</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* ===== HEADER ===== */
+.header {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: white;
+    padding: 28px 32px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.header h1 { font-size: 1.5rem; font-weight: 700; }
+.header .meta { font-size: 0.9rem; opacity: 0.85; }
+.header .data-freshness {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600;
+}
+.fresh { background: #22c55e; color: white; }
+.stale { background: #f59e0b; color: #1e293b; }
+
+/* ===== EXECUTIVE SUMMARY ===== */
+.summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.summary-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 5px solid #e2e8f0;
+}
+.summary-card h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: #64748b; }
+
+/* Sentiment big badge */
+.sentiment-badge {
+    display: inline-block;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+.sentiment-detail { font-size: 0.9rem; color: #475569; margin-top: 8px; }
+
+/* Position gauge */
+.position-gauge {
+    margin-top: 8px;
+}
+.gauge-bar {
+    height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #ef4444 0%, #f59e0b 40%, #22c55e 70%, #22c55e 100%);
+    margin-bottom: 8px;
+    position: relative;
+}
+.gauge-marker {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    position: relative; top: -13px;
+    transition: left 0.3s;
+}
+.gauge-text { font-weight: 700; font-size: 1.1rem; }
+
+/* Risk card */
+.risk-list { list-style: none; }
+.risk-list li {
+    padding: 6px 0; border-bottom: 1px solid #fee2e2;
+    font-size: 0.9rem;
+}
+.risk-list li:last-child { border-bottom: none; }
+.no-risk { color: #16a34a; font-weight: 600; }
+
+/* ===== SECTION TITLES ===== */
+.section {
+    background: white;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.section-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ===== DISTRIBUTION BARS ===== */
+.dist-stats {
+    display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.dist-stat {
+    flex: 1; min-width: 80px; text-align: center;
+    padding: 10px; border-radius: 8px;
+}
+.dist-stat .count { font-size: 1.4rem; font-weight: 700; }
+.dist-stat .lbl { font-size: 0.8rem; color: #64748b; }
+
+/* Momentum bar chart */
+.bar-chart { margin-top: 8px; }
+.bar-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px; font-size: 0.82rem;
+}
+.bar-row .name { width: 72px; text-align: right; flex-shrink: 0; color: #475569; }
+.bar-row .bar-wrap {
+    flex: 1; height: 18px; background: #f1f5f9;
+    border-radius: 3px; overflow: hidden;
+}
+.bar-row .bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.5s;
+    min-width: 2px;
+}
+.bar-row .val { width: 56px; text-align: right; flex-shrink: 0; font-weight: 600; font-size: 0.78rem; }
+
+/* ===== DIVERGENCE WARNING ===== */
+.warning-box {
+    background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 8px; padding: 16px; margin-top: 16px;
+}
+.warning-box h4 { color: #dc2626; margin-bottom: 8px; }
+
+/* ===== TABLE ===== */
+.ranking-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.ranking-table th {
+    background: #f8fafc; padding: 10px 8px;
+    text-align: left; font-weight: 600; color: #64748b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.ranking-table td {
+    padding: 8px; border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+.ranking-table tr:hover { background: #f8fafc; }
+.ranking-table .rank { width: 32px; text-align: center; font-weight: 700; color: #94a3b8; }
+.ranking-table .sector-name { font-weight: 600; }
+
+/* Mini bar in table cell */
+.mini-bar {
+    display: inline-block; height: 6px; border-radius: 3px;
+    vertical-align: middle; margin-right: 6px;
+}
+
+/* Persistence badge in table */
+.p-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.72rem; font-weight: 600;
+}
+
+/* Summary row */
+.table-summary {
+    display: flex; gap: 20px; margin-top: 16px;
+    font-size: 0.9rem; flex-wrap: wrap;
+}
+.table-summary span { font-weight: 600; }
+
+/* ===== STOCK CARDS ===== */
+.stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+.stock-card {
+    background: white; border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+.stock-card-header {
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+.stock-card-body { padding: 12px 16px; }
+.stock-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid #f8fafc;
+}
+.stock-row:last-child { border-bottom: none; }
+.stock-score {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.85rem;
+    color: white; flex-shrink: 0;
+}
+.stock-info { flex: 1; }
+.stock-info .code { font-weight: 600; font-size: 0.88rem; }
+.stock-info .name { font-size: 0.82rem; color: #64748b; }
+.stock-metrics { text-align: right; font-size: 0.78rem; }
+.stock-metrics .positive { color: #dc2626; }
+.stock-metrics .negative { color: #16a34a; }
+
+/* ===== FOOTER ===== */
+.footer {
+    background: white; border-radius: 12px;
+    padding: 20px 28px; margin-top: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    font-size: 0.82rem; color: #94a3b8;
+}
+.footer .status-grid {
+    display: flex; gap: 24px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.footer .status-item { display: flex; align-items: center; gap: 6px; }
+.footer .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+}
+.footer .dot-success { background: #22c55e; }
+.footer .dot-warning { background: #f59e0b; }
+.footer .dot-failed { background: #ef4444; }
+.footer .dot-skipped { background: #94a3b8; }
+.footer .disclaimer { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 640px) {
+    body { padding: 8px; }
+    .header { padding: 20px; }
+    .header h1 { font-size: 1.2rem; }
+    .summary { grid-template-columns: 1fr; }
+    .stock-grid { grid-template-columns: 1fr; }
+    .bar-row .name { width: 56px; font-size: 0.72rem; }
+    .ranking-table { font-size: 0.75rem; }
+}
+</style>
+</head>
+<body>
+
+
+<div class="header">
+  <div>
+    <h1>📊 A股趋势交易系统</h1>
+    <div class="meta">日报 · 2026-06-15 (周一) · 生成 22:05:58 CST</div>
+  </div>
+  <div class="data-freshness fresh">行业: 20260612 | L3: 20260612 | 个股: 20260615</div>
+</div>
+
+
+<div class="summary">
+  <div class="summary-card" style="border-left-color: #991b1b;">
+    <h3>市场情绪</h3>
+    <div class="sentiment-badge" style="background:#fee2e2;color:#991b1b;">📉 Bearish</div>
+    <div class="sentiment-detail">
+      行业平均动量: <b style="color:#ef4444">-6.89%</b><br>
+      上涨 4 · 下跌 24 · 持平 3
+    </div>
+  </div>
+
+  <div class="summary-card" style="border-left-color: #6366f1;">
+    <h3>仓位建议</h3>
+    <div class="position-gauge">
+      <div class="gauge-bar"></div>
+      <div class="gauge-marker" style="left: calc(20% - 9px); background: hsl(24, 65%, 48%);"></div>
+    </div>
+    <div class="gauge-text">建议2-3成仓位（80个L3领先→可适当上浮）</div>
+  </div>
+
+  <div class="summary-card" style="border-left-color: #ef4444;">
+    <h3>风险预警</h3>
+    <ul class='risk-list'><li>⚠️ 建筑材料</li><li>⚠️ 通信</li></ul>
+    <div style="margin-top:8px;font-size:0.82rem;color:#64748b;">
+      顶背离行业: 2 个
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与趋势 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: 20260612)</span></div>
+
+<div class="section">
+  <div class="section-title">📋 模块1: 市场情绪与动量分布</div>
+
+  <div class="dist-stats">
+    <div class="dist-stat" style="background:#fef2f2;">
+      <div class="count" style="color:#dc2626;">4</div>
+      <div class="lbl">上涨行业</div>
+    </div>
+    <div class="dist-stat" style="background:#f8fafc;">
+      <div class="count" style="color:#64748b;">3</div>
+      <div class="lbl">持平行业</div>
+    </div>
+    <div class="dist-stat" style="background:#f0fdf4;">
+      <div class="count" style="color:#16a34a;">24</div>
+      <div class="lbl">下跌行业</div>
+    </div>
+    <div class="dist-stat" style="background:#f8fafc;">
+      <div class="count" style="color:#6366f1;">31</div>
+      <div class="lbl">总计</div>
+    </div>
+  </div>
+
+  <p style="font-size:0.85rem;color:#64748b;margin-bottom:8px;">
+    📊 31个申万一级行业 20日动量分布（红涨绿跌）
+  </p>
+  <div class="bar-chart">
+    <div class="bar-row"><span class="name">电力设备</span><span class="bar-wrap"><span class="bar-fill" style="width:100%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-7.8%</span></div>
+<div class="bar-row"><span class="name">传媒</span><span class="bar-wrap"><span class="bar-fill" style="width:97%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-7.6%</span></div>
+<div class="bar-row"><span class="name">综合</span><span class="bar-wrap"><span class="bar-fill" style="width:87%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-6.8%</span></div>
+<div class="bar-row"><span class="name">计算机</span><span class="bar-wrap"><span class="bar-fill" style="width:86%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-6.8%</span></div>
+<div class="bar-row"><span class="name">公用事业</span><span class="bar-wrap"><span class="bar-fill" style="width:81%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-6.4%</span></div>
+<div class="bar-row"><span class="name">商贸零售</span><span class="bar-wrap"><span class="bar-fill" style="width:81%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-6.3%</span></div>
+<div class="bar-row"><span class="name">汽车</span><span class="bar-wrap"><span class="bar-fill" style="width:80%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-6.3%</span></div>
+<div class="bar-row"><span class="name">房地产</span><span class="bar-wrap"><span class="bar-fill" style="width:72%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-5.6%</span></div>
+<div class="bar-row"><span class="name">医药生物</span><span class="bar-wrap"><span class="bar-fill" style="width:65%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-5.1%</span></div>
+<div class="bar-row"><span class="name">食品饮料</span><span class="bar-wrap"><span class="bar-fill" style="width:56%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-4.4%</span></div>
+<div class="bar-row"><span class="name">农林牧渔</span><span class="bar-wrap"><span class="bar-fill" style="width:54%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-4.3%</span></div>
+<div class="bar-row"><span class="name">社会服务</span><span class="bar-wrap"><span class="bar-fill" style="width:53%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-4.2%</span></div>
+<div class="bar-row"><span class="name">建筑材料</span><span class="bar-wrap"><span class="bar-fill" style="width:53%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-4.2%</span></div>
+<div class="bar-row"><span class="name">美容护理</span><span class="bar-wrap"><span class="bar-fill" style="width:51%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-4.0%</span></div>
+<div class="bar-row"><span class="name">轻工制造</span><span class="bar-wrap"><span class="bar-fill" style="width:49%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-3.8%</span></div>
+<div class="bar-row"><span class="name">建筑装饰</span><span class="bar-wrap"><span class="bar-fill" style="width:45%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-3.6%</span></div>
+<div class="bar-row"><span class="name">交通运输</span><span class="bar-wrap"><span class="bar-fill" style="width:44%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-3.5%</span></div>
+<div class="bar-row"><span class="name">环保</span><span class="bar-wrap"><span class="bar-fill" style="width:40%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-3.2%</span></div>
+<div class="bar-row"><span class="name">纺织服饰</span><span class="bar-wrap"><span class="bar-fill" style="width:40%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-3.1%</span></div>
+<div class="bar-row"><span class="name">电子</span><span class="bar-wrap"><span class="bar-fill" style="width:34%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-2.7%</span></div>
+<div class="bar-row"><span class="name">国防军工</span><span class="bar-wrap"><span class="bar-fill" style="width:31%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-2.5%</span></div>
+<div class="bar-row"><span class="name">钢铁</span><span class="bar-wrap"><span class="bar-fill" style="width:23%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-1.8%</span></div>
+<div class="bar-row"><span class="name">机械设备</span><span class="bar-wrap"><span class="bar-fill" style="width:17%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-1.4%</span></div>
+<div class="bar-row"><span class="name">石油石化</span><span class="bar-wrap"><span class="bar-fill" style="width:13%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-1.0%</span></div>
+<div class="bar-row"><span class="name">通信</span><span class="bar-wrap"><span class="bar-fill" style="width:6%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-0.5%</span></div>
+<div class="bar-row"><span class="name">家用电器</span><span class="bar-wrap"><span class="bar-fill" style="width:6%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-0.5%</span></div>
+<div class="bar-row"><span class="name">有色金属</span><span class="bar-wrap"><span class="bar-fill" style="width:2%;background:#22c55e;"></span></span><span class="val" style="color:#22c55e">-0.1%</span></div>
+<div class="bar-row"><span class="name">非银金融</span><span class="bar-wrap"><span class="bar-fill" style="width:7%;background:#ef4444;"></span></span><span class="val" style="color:#ef4444">+0.6%</span></div>
+<div class="bar-row"><span class="name">煤炭</span><span class="bar-wrap"><span class="bar-fill" style="width:15%;background:#ef4444;"></span></span><span class="val" style="color:#ef4444">+1.2%</span></div>
+<div class="bar-row"><span class="name">基础化工</span><span class="bar-wrap"><span class="bar-fill" style="width:29%;background:#ef4444;"></span></span><span class="val" style="color:#ef4444">+2.3%</span></div>
+<div class="bar-row"><span class="name">银行</span><span class="bar-wrap"><span class="bar-fill" style="width:58%;background:#ef4444;"></span></span><span class="val" style="color:#ef4444">+4.6%</span></div>
+
+  </div>
+
+  <div class="warning-box">
+  <h4>⚠️ MACD 顶背离预警</h4>
+  <p style="color:#7f1d1d;">以下行业出现价格新高但 MACD DIF 未创新高，提示见顶风险：</p>
+  <p style="margin-top:6px;"><b>建筑材料、通信</b></p>
+</div>
+</div>
+
+
+<div class="section">
+  <div class="section-title">📊 模块2: 板块持续性排名</div>
+  <div style="overflow-x:auto;">
+  <table class="ranking-table">
+    <thead>
+      <tr>
+        <th>#</th><th>行业</th><th>持续性得分</th>
+        <th>动量分</th><th>收益斜率</th><th>换手率</th><th>相对强度</th><th>判定</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="sector-name">非银金融</td><td>  <span class="mini-bar" style="width:100px;background:hsl(59, 65%, 48%);"></span>  4.92</td><td><span class="mini-bar" style="width:97px;background:#6366f1;"></span>6.41</td><td>6.80</td><td>9.97</td><td>3.20</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">2</td><td class="sector-name">银行</td><td>  <span class="mini-bar" style="width:96px;background:hsl(57, 65%, 48%);"></span>  4.73</td><td><span class="mini-bar" style="width:100px;background:#6366f1;"></span>6.57</td><td>10.00</td><td>8.81</td><td>0.00</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">3</td><td class="sector-name">有色金属</td><td>  <span class="mini-bar" style="width:95px;background:hsl(56, 65%, 48%);"></span>  4.69</td><td><span class="mini-bar" style="width:85px;background:#6366f1;"></span>5.64</td><td>6.24</td><td>10.00</td><td>3.76</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">4</td><td class="sector-name">基础化工</td><td>  <span class="mini-bar" style="width:89px;background:hsl(53, 65%, 48%);"></span>  4.42</td><td><span class="mini-bar" style="width:96px;background:#6366f1;"></span>6.35</td><td>8.14</td><td>7.58</td><td>1.86</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">5</td><td class="sector-name">钢铁</td><td>  <span class="mini-bar" style="width:87px;background:hsl(52, 65%, 48%);"></span>  4.30</td><td><span class="mini-bar" style="width:79px;background:#6366f1;"></span>5.22</td><td>4.82</td><td>8.65</td><td>5.18</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">6</td><td class="sector-name">交通运输</td><td>  <span class="mini-bar" style="width:80px;background:hsl(47, 65%, 48%);"></span>  3.95</td><td><span class="mini-bar" style="width:58px;background:#6366f1;"></span>3.87</td><td>3.48</td><td>8.93</td><td>6.52</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">7</td><td class="sector-name">石油石化</td><td>  <span class="mini-bar" style="width:74px;background:hsl(44, 65%, 48%);"></span>  3.66</td><td><span class="mini-bar" style="width:57px;background:#6366f1;"></span>3.78</td><td>5.47</td><td>7.62</td><td>4.53</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">8</td><td class="sector-name">建筑材料</td><td>  <span class="mini-bar" style="width:73px;background:hsl(43, 65%, 48%);"></span>  3.62</td><td><span class="mini-bar" style="width:87px;background:#6366f1;"></span>5.74</td><td>2.92</td><td>4.50</td><td>7.08</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">9</td><td class="sector-name">综合</td><td>  <span class="mini-bar" style="width:71px;background:hsl(42, 65%, 48%);"></span>  3.50</td><td><span class="mini-bar" style="width:59px;background:#6366f1;"></span>3.89</td><td>0.79</td><td>6.67</td><td>9.21</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">10</td><td class="sector-name">国防军工</td><td>  <span class="mini-bar" style="width:70px;background:hsl(42, 65%, 48%);"></span>  3.46</td><td><span class="mini-bar" style="width:59px;background:#6366f1;"></span>3.90</td><td>4.29</td><td>6.45</td><td>5.71</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">11</td><td class="sector-name">农林牧渔</td><td>  <span class="mini-bar" style="width:69px;background:hsl(41, 65%, 48%);"></span>  3.43</td><td><span class="mini-bar" style="width:52px;background:#6366f1;"></span>3.44</td><td>2.84</td><td>7.02</td><td>7.16</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">12</td><td class="sector-name">社会服务</td><td>  <span class="mini-bar" style="width:67px;background:hsl(40, 65%, 48%);"></span>  3.31</td><td><span class="mini-bar" style="width:55px;background:#6366f1;"></span>3.65</td><td>2.91</td><td>6.10</td><td>7.09</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">13</td><td class="sector-name">通信</td><td>  <span class="mini-bar" style="width:96px;background:hsl(57, 65%, 48%);"></span>  4.77</td><td><span class="mini-bar" style="width:89px;background:#6366f1;"></span>5.91</td><td>5.86</td><td>2.46</td><td>4.14</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">14</td><td class="sector-name">电子</td><td>  <span class="mini-bar" style="width:95px;background:hsl(56, 65%, 48%);"></span>  4.69</td><td><span class="mini-bar" style="width:81px;background:#6366f1;"></span>5.36</td><td>4.15</td><td>2.91</td><td>5.85</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">15</td><td class="sector-name">煤炭</td><td>  <span class="mini-bar" style="width:92px;background:hsl(55, 65%, 48%);"></span>  4.55</td><td><span class="mini-bar" style="width:76px;background:#6366f1;"></span>5.03</td><td>7.28</td><td>2.72</td><td>2.72</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">16</td><td class="sector-name">美容护理</td><td>  <span class="mini-bar" style="width:60px;background:hsl(36, 65%, 48%);"></span>  2.96</td><td><span class="mini-bar" style="width:59px;background:#6366f1;"></span>3.90</td><td>3.04</td><td>3.94</td><td>6.96</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">17</td><td class="sector-name">传媒</td><td>  <span class="mini-bar" style="width:59px;background:hsl(35, 65%, 48%);"></span>  2.94</td><td><span class="mini-bar" style="width:52px;background:#6366f1;"></span>3.43</td><td>0.16</td><td>4.55</td><td>9.84</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">18</td><td class="sector-name">机械设备</td><td>  <span class="mini-bar" style="width:59px;background:hsl(35, 65%, 48%);"></span>  2.91</td><td><span class="mini-bar" style="width:64px;background:#6366f1;"></span>4.27</td><td>5.20</td><td>3.14</td><td>4.80</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">19</td><td class="sector-name">轻工制造</td><td>  <span class="mini-bar" style="width:57px;background:hsl(34, 65%, 48%);"></span>  2.84</td><td><span class="mini-bar" style="width:53px;background:#6366f1;"></span>3.51</td><td>3.21</td><td>3.92</td><td>6.79</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">20</td><td class="sector-name">家用电器</td><td>  <span class="mini-bar" style="width:57px;background:hsl(34, 65%, 48%);"></span>  2.84</td><td><span class="mini-bar" style="width:67px;background:#6366f1;"></span>4.42</td><td>5.90</td><td>2.60</td><td>4.10</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">21</td><td class="sector-name">医药生物</td><td>  <span class="mini-bar" style="width:57px;background:hsl(34, 65%, 48%);"></span>  2.82</td><td><span class="mini-bar" style="width:53px;background:#6366f1;"></span>3.51</td><td>2.18</td><td>3.83</td><td>7.82</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">22</td><td class="sector-name">电力设备</td><td>  <span class="mini-bar" style="width:57px;background:hsl(34, 65%, 48%);"></span>  2.81</td><td><span class="mini-bar" style="width:57px;background:#6366f1;"></span>3.79</td><td>0.00</td><td>3.37</td><td>10.00</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">23</td><td class="sector-name">房地产</td><td>  <span class="mini-bar" style="width:56px;background:hsl(34, 65%, 48%);"></span>  2.80</td><td><span class="mini-bar" style="width:54px;background:#6366f1;"></span>3.61</td><td>1.76</td><td>3.56</td><td>8.24</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">24</td><td class="sector-name">建筑装饰</td><td>  <span class="mini-bar" style="width:56px;background:hsl(33, 65%, 48%);"></span>  2.78</td><td><span class="mini-bar" style="width:53px;background:#6366f1;"></span>3.49</td><td>3.42</td><td>3.65</td><td>6.58</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">25</td><td class="sector-name">食品饮料</td><td>  <span class="mini-bar" style="width:54px;background:hsl(32, 65%, 48%);"></span>  2.70</td><td><span class="mini-bar" style="width:57px;background:#6366f1;"></span>3.81</td><td>2.76</td><td>2.76</td><td>7.24</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">26</td><td class="sector-name">环保</td><td>  <span class="mini-bar" style="width:53px;background:hsl(32, 65%, 48%);"></span>  2.63</td><td><span class="mini-bar" style="width:57px;background:#6366f1;"></span>3.78</td><td>3.73</td><td>2.48</td><td>6.27</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">27</td><td class="sector-name">纺织服饰</td><td>  <span class="mini-bar" style="width:52px;background:hsl(31, 65%, 48%);"></span>  2.59</td><td><span class="mini-bar" style="width:56px;background:#6366f1;"></span>3.68</td><td>3.78</td><td>2.41</td><td>6.22</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">28</td><td class="sector-name">计算机</td><td>  <span class="mini-bar" style="width:51px;background:hsl(30, 65%, 48%);"></span>  2.52</td><td><span class="mini-bar" style="width:54px;background:#6366f1;"></span>3.56</td><td>0.86</td><td>2.25</td><td>9.14</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">29</td><td class="sector-name">汽车</td><td>  <span class="mini-bar" style="width:49px;background:hsl(29, 65%, 48%);"></span>  2.45</td><td><span class="mini-bar" style="width:49px;background:#6366f1;"></span>3.28</td><td>1.24</td><td>2.35</td><td>8.76</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">30</td><td class="sector-name">商贸零售</td><td>  <span class="mini-bar" style="width:48px;background:hsl(29, 65%, 48%);"></span>  2.41</td><td><span class="mini-bar" style="width:55px;background:#6366f1;"></span>3.66</td><td>1.20</td><td>1.54</td><td>8.80</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+<tr><td class="rank">31</td><td class="sector-name">公用事业</td><td>  <span class="mini-bar" style="width:45px;background:hsl(27, 65%, 48%);"></span>  2.25</td><td><span class="mini-bar" style="width:63px;background:#6366f1;"></span>4.18</td><td>1.14</td><td>0.00</td><td>8.86</td><td><span class="p-badge" style="color:#dc2626;background:#fef2f2">低持续性</span></td></tr>
+
+    </tbody>
+  </table>
+  </div>
+  <div class="table-summary">
+    <span style="color:#16a34a;">🔥 高持续性: 0 个</span>
+    <span style="color:#d97706;">⚡ 中等持续性: 9 个</span>
+    <span style="color:#dc2626;">⚠️ 低持续性: 22 个</span>
+  </div>
+</div>
+
+
+<div class="section" style="background:linear-gradient(135deg,#f0fdf4,#fef3c7,#fef2f2);">
+  <div class="section-title">📐 持续性量化参考</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:.82rem;">
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #16a34a;">
+      <b style="color:#16a34a;">🔥 高持续性 (≥7.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#16a34a;">+2.90%</b><br>
+        胜率 <b>60%</b> · 适合重仓参与
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #d97706;">
+      <b style="color:#d97706;">⚡ 中等持续性 (5.0-7.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#d97706;">+0.65%</b><br>
+        胜率 <b>51%</b> · 轻仓试探或观望
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:14px;border-left:4px solid #dc2626;">
+      <b style="color:#dc2626;">⚠️ 低持续性 (<5.0)</b>
+      <div style="margin-top:6px;color:#475569;">
+        历史20日后均收益 <b style="color:#dc2626;">+0.34%</b><br>
+        胜率 <b>50%</b> · 随机游走，建议回避
+      </div>
+    </div>
+  </div>
+  <p style="font-size:.72rem;color:#94a3b8;margin-top:8px;">📊 基于 2000-2026 年 31 个申万 L1 行业历史数据回测 | 买点信号: 持续性从低→中突破时</p>
+</div>
+
+
+<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万二级行业 · ETF/赛道选择 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: 20260612)</span></div>
+<div class="section">
+  <div class="section-title">📊 L2 持续性 Top-20</div>
+  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>持续性得分</th><th>判定</th></tr></thead><tbody><tr><td class="rank">1</td><td>航空机场</td><td><span class="mini-bar" style="width:61px;background:hsl(74, 65%, 48%);"></span>6.17</td><td><span class="p-badge" style="color:hsl(74, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">2</td><td>能源金属</td><td><span class="mini-bar" style="width:58px;background:hsl(70, 65%, 48%);"></span>5.81</td><td><span class="p-badge" style="color:hsl(70, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">3</td><td>小金属</td><td><span class="mini-bar" style="width:57px;background:hsl(69, 65%, 48%);"></span>5.79</td><td><span class="p-badge" style="color:hsl(69, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">4</td><td>金属新材料</td><td><span class="mini-bar" style="width:55px;background:hsl(67, 65%, 48%);"></span>5.58</td><td><span class="p-badge" style="color:hsl(67, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">5</td><td>证券Ⅱ</td><td><span class="mini-bar" style="width:55px;background:hsl(67, 65%, 48%);"></span>5.55</td><td><span class="p-badge" style="color:hsl(67, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">6</td><td>国有大型银行Ⅱ</td><td><span class="mini-bar" style="width:55px;background:hsl(66, 65%, 48%);"></span>5.50</td><td><span class="p-badge" style="color:hsl(66, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">7</td><td>农化制品</td><td><span class="mini-bar" style="width:54px;background:hsl(65, 65%, 48%);"></span>5.43</td><td><span class="p-badge" style="color:hsl(65, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">8</td><td>化学制品</td><td><span class="mini-bar" style="width:53px;background:hsl(64, 65%, 48%);"></span>5.35</td><td><span class="p-badge" style="color:hsl(64, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">9</td><td>股份制银行Ⅱ</td><td><span class="mini-bar" style="width:53px;background:hsl(64, 65%, 48%);"></span>5.33</td><td><span class="p-badge" style="color:hsl(64, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">10</td><td>城商行Ⅱ</td><td><span class="mini-bar" style="width:52px;background:hsl(63, 65%, 48%);"></span>5.27</td><td><span class="p-badge" style="color:hsl(63, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">11</td><td>农商行Ⅱ</td><td><span class="mini-bar" style="width:52px;background:hsl(63, 65%, 48%);"></span>5.24</td><td><span class="p-badge" style="color:hsl(63, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">12</td><td>保险Ⅱ</td><td><span class="mini-bar" style="width:51px;background:hsl(62, 65%, 48%);"></span>5.17</td><td><span class="p-badge" style="color:hsl(62, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">13</td><td>电子化学品Ⅱ</td><td><span class="mini-bar" style="width:51px;background:hsl(62, 65%, 48%);"></span>5.16</td><td><span class="p-badge" style="color:hsl(62, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">14</td><td>玻璃玻纤</td><td><span class="mini-bar" style="width:51px;background:hsl(62, 65%, 48%);"></span>5.13</td><td><span class="p-badge" style="color:hsl(62, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">15</td><td>冶钢原料</td><td><span class="mini-bar" style="width:51px;background:hsl(61, 65%, 48%);"></span>5.11</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">16</td><td>炼化及贸易</td><td><span class="mini-bar" style="width:51px;background:hsl(61, 65%, 48%);"></span>5.11</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">17</td><td>元件</td><td><span class="mini-bar" style="width:51px;background:hsl(61, 65%, 48%);"></span>5.11</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">18</td><td>化学原料</td><td><span class="mini-bar" style="width:50px;background:hsl(61, 65%, 48%);"></span>5.09</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">19</td><td>旅游及景区</td><td><span class="mini-bar" style="width:50px;background:hsl(61, 65%, 48%);"></span>5.09</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+<tr><td class="rank">20</td><td>种植业</td><td><span class="mini-bar" style="width:50px;background:hsl(61, 65%, 48%);"></span>5.07</td><td><span class="p-badge" style="color:hsl(61, 65%, 48%);background:#f8fafc;">⚡中等持续性</span></td></tr>
+</tbody></table>
+</div>
+<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">三、个股精选 — 从强势三级行业中优选（已排除银行/非银金融） <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股: 20260615 | 资金流: 20260615)</span></div>
+
+<div class="section">
+  <div class="section-title">🎯 模块3: 个股精选</div>
+  <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px;">
+    从持续性 Top-7 行业中精选 85 只个股
+    （已排除银行/证券/保险类，评分 = 超额收益×50% + 5日动量×30% + MA20偏离×20%）
+  </p>
+  <div class="stock-grid">
+    <div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(120, 65%, 48%);">📌 种植业 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600108.SH</div>  <div class="name">亚盛集团</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+5.6%</span><br>  <span>5日动量 </span><span class="positive">+11.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 3.32 (ATR 4.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 0.49%↓ · +0.0</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002041.SZ</div>  <div class="name">登海种业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+5.8%</span><br>  <span>5日动量 </span><span class="positive">+8.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 8.31 (ATR 3.4%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位67% · ROE 0.92%↓ · +1.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(85, 65%, 48%);">7.1</div><div class="stock-info">  <div class="code">000713.SZ</div>  <div class="name">国投丰乐</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+8.5%</span><br>  <span>5日动量 </span><span class="positive">+2.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 5.65 (ATR 2.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位33% · PB分位0% ✅ · +1.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(81, 65%, 48%);">6.7</div><div class="stock-info">  <div class="code">000998.SZ</div>  <div class="name">隆平高科</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+8.2%</span><br>  <span>5日动量 </span><span class="positive">+2.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 7.92 (ATR 2.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位67% · PB分位33% · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(82, 65%, 48%);">6.8</div><div class="stock-info">  <div class="code">601952.SH</div>  <div class="name">苏垦农发</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+8.2%</span><br>  <span>5日动量 </span><span class="negative">0.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 8.18 (ATR 2.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 0.7%↓ · +0.1</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(106, 65%, 48%);">📌 化学纤维 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(106, 65%, 48%);">8.9</div><div class="stock-info">  <div class="code">603225.SH</div>  <div class="name">新凤鸣</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+35.0%</span><br>  <span>5日动量 </span><span class="positive">+11.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 18.74 (ATR 6.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 1.88%→ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(49, 65%, 48%);">4.1</div><div class="stock-info">  <div class="code">600063.SH</div>  <div class="name">皖维高新</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+31.8%</span><br>  <span>5日动量 </span><span class="positive">+1.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 6.75 (ATR 6.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.62%↓ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(45, 65%, 48%);">3.8</div><div class="stock-info">  <div class="code">002064.SZ</div>  <div class="name">华峰化学</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+9.6%</span><br>  <span>5日动量 </span><span class="positive">+6.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 9.80 (ATR 5.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 2.42%↓ · +0.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(41, 65%, 48%);">3.4</div><div class="stock-info">  <div class="code">600889.SH</div>  <div class="name">*ST京化</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+12.7%</span><br>  <span>5日动量 </span><span class="positive">+5.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 15.06 (ATR 3.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.68%↑ · +0.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002206.SZ</div>  <div class="name">海利得</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+2.1%</span><br>  <span>5日动量 </span><span class="positive">+7.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 5.13 (ATR 3.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 3.03%→ · +1.7</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(14, 65%, 48%);">📌 化学原料 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(14, 65%, 48%);">1.2</div><div class="stock-info">  <div class="code">600367.SH</div>  <div class="name">红星发展</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+117.4%</span><br>  <span>5日动量 </span><span class="positive">+2.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 46.63 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.16%→ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">000510.SZ</div>  <div class="name">新金路</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+63.2%</span><br>  <span>5日动量 </span><span class="positive">+27.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 18.46 (ATR 6.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位67% · +0.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(47, 65%, 48%);">3.9</div><div class="stock-info">  <div class="code">603938.SH</div>  <div class="name">三孚股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+32.3%</span><br>  <span>5日动量 </span><span class="positive">+4.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 45.78 (ATR 8.2%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.54%↓ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600618.SH</div>  <div class="name">氯碱化工</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+0.3%</span><br>  <span>5日动量 </span><span class="positive">+10.7%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 10.01 (ATR 4.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位0% ✅ · ROE 2.18%→ · +1.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(71, 65%, 48%);">5.9</div><div class="stock-info">  <div class="code">601216.SH</div>  <div class="name">君正集团</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+3.1%</span><br>  <span>5日动量 </span><span class="positive">+4.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 4.86 (ATR 3.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位33% · ROE 2.43%↓ · +1.5</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 化学制品 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">603065.SH</div>  <div class="name">宿迁联盛</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+71.6%</span><br>  <span>5日动量 </span><span class="positive">+41.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 12.13 (ATR 4.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位50% · ROE 0.27%→ · +0.3</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">002971.SZ</div>  <div class="name">和远气体</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+44.5%</span><br>  <span>5日动量 </span><span class="positive">+43.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 50.09 (ATR 5.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位75% · ROE 1.06%→ · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(95, 65%, 48%);">7.9</div><div class="stock-info">  <div class="code">600500.SH</div>  <div class="name">中化国际</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+37.0%</span><br>  <span>5日动量 </span><span class="positive">+52.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 7.17 (ATR 6.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位25% ✅ · +0.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600160.SH</div>  <div class="name">巨化股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+41.5%</span><br>  <span>5日动量 </span><span class="positive">+22.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 41.93 (ATR 5.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 5.58%→ · +0.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(65, 65%, 48%);">5.5</div><div class="stock-info">  <div class="code">300174.SZ</div>  <div class="name">元力股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+49.3%</span><br>  <span>5日动量 </span><span class="positive">+10.7%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 21.36 (ATR 8.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 1.19%↓ · +1.6</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 塑料 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">301196.SZ</div>  <div class="name">唯科科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+22.5%</span><br>  <span>5日动量 </span><span class="positive">+37.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 164.80 (ATR 7.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 2.13%↓ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">002585.SZ</div>  <div class="name">双星新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+44.5%</span><br>  <span>5日动量 </span><span class="positive">+14.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 10.69 (ATR 8.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位0% ✅ · ROE 0.05%↑ · +0.8</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">300221.SZ</div>  <div class="name">银禧科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+34.7%</span><br>  <span>5日动量 </span><span class="positive">+18.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 14.46 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 2.59%↓ · +0.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">603150.SH</div>  <div class="name">万朗磁塑</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+9.3%</span><br>  <span>5日动量 </span><span class="positive">+16.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 69.96 (ATR 5.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 1.55%↓ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">688386.SH</div>  <div class="name">泛亚微透</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+4.0%</span><br>  <span>5日动量 </span><span class="positive">+23.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 77.94 (ATR 6.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位50% · ROE 1.54%↓ · +0.3</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(120, 65%, 48%);">📌 农化制品 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002258.SZ</div>  <div class="name">利尔化学</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+21.9%</span><br>  <span>5日动量 </span><span class="positive">+7.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 12.49 (ATR 4.4%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.45%→ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(47, 65%, 48%);">3.9</div><div class="stock-info">  <div class="code">300505.SZ</div>  <div class="name">川金诺</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+3.2%</span><br>  <span>5日动量 </span><span class="positive">+22.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 20.24 (ATR 5.4%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位33% · ROE 1.4%↓ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">000792.SZ</div>  <div class="name">盐湖股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+5.8%</span><br>  <span>5日动量 </span><span class="positive">+13.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 29.07 (ATR 4.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 6.75%↓ · +0.5</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600096.SH</div>  <div class="name">云天化</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+8.6%</span><br>  <span>5日动量 </span><span class="positive">+7.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 28.69 (ATR 4.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位67% · ROE 5.63%↓ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600470.SH</div>  <div class="name">六国化工</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+3.7%</span><br>  <span>5日动量 </span><span class="positive">+10.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 5.20 (ATR 5.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位0% ✅ · +0.5</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 金属新材料 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">300835.SZ</div>  <div class="name">龙磁科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+73.5%</span><br>  <span>5日动量 </span><span class="positive">+8.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 163.11 (ATR 8.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位67% · PB分位67% · ROE 2.21%↓ · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(81, 65%, 48%);">6.7</div><div class="stock-info">  <div class="code">000969.SZ</div>  <div class="name">安泰科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+7.0%</span><br>  <span>5日动量 </span><span class="positive">+15.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 21.70 (ATR 5.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 1.7%↓ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">688102.SH</div>  <div class="name">斯瑞新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-11.7%</span><br>  <span>5日动量 </span><span class="positive">+13.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 35.44 (ATR 6.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 2.22%↓ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(54, 65%, 48%);">4.5</div><div class="stock-info">  <div class="code">000795.SZ</div>  <div class="name">英洛华</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-6.1%</span><br>  <span>5日动量 </span><span class="positive">+4.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 8.59 (ATR 3.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 2.58%↓ · +1.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">300748.SZ</div>  <div class="name">金力永磁</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-15.4%</span><br>  <span>5日动量 </span><span class="positive">+7.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 28.31 (ATR 4.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位33% · PB分位33% · ROE 2.51%↓ · +1.2</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 小金属 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">000657.SZ</div>  <div class="name">中钨高新</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+48.5%</span><br>  <span>5日动量 </span><span class="positive">+27.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 75.46 (ATR 6.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位75% · PB分位75% · ROE 9.03%↓ · +1.0</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">002842.SZ</div>  <div class="name">翔鹭钨业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+17.6%</span><br>  <span>5日动量 </span><span class="positive">+31.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 37.72 (ATR 6.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位25% ✅ · ROE 18.79%→ · +2.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(108, 65%, 48%);">9.0</div><div class="stock-info">  <div class="code">600549.SH</div>  <div class="name">厦门钨业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+29.3%</span><br>  <span>5日动量 </span><span class="positive">+20.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 62.74 (ATR 6.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位25% ✅ · PB分位0% ✅ · ROE 6.24%→ · +1.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(16, 65%, 48%);">1.4</div><div class="stock-info">  <div class="code">002378.SZ</div>  <div class="name">章源钨业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+20.8%</span><br>  <span>5日动量 </span><span class="positive">+24.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 32.80 (ATR 6.2%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 15.08%→ · +1.8</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(20, 65%, 48%);">1.7</div><div class="stock-info">  <div class="code">002428.SZ</div>  <div class="name">云南锗业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+6.9%</span><br>  <span>5日动量 </span><span class="positive">+29.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 87.41 (ATR 6.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 0.62%↓ · +0.0</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 工业金属 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">000630.SZ</div>  <div class="name">铜陵有色</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+31.3%</span><br>  <span>5日动量 </span><span class="positive">+29.2%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 6.85 (ATR 5.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位33% · ROE 3.59%→ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(91, 65%, 48%);">7.6</div><div class="stock-info">  <div class="code">002203.SZ</div>  <div class="name">海亮股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+20.2%</span><br>  <span>5日动量 </span><span class="positive">+38.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 21.67 (ATR 6.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位33% · PB分位67% · ROE 2.57%↓ · +1.0</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(60, 65%, 48%);">5.0</div><div class="stock-info">  <div class="code">600888.SH</div>  <div class="name">新疆众和</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+39.8%</span><br>  <span>5日动量 </span><span class="positive">+8.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 9.99 (ATR 6.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 2.17%↓ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(64, 65%, 48%);">5.4</div><div class="stock-info">  <div class="code">002171.SZ</div>  <div class="name">楚江新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+24.0%</span><br>  <span>5日动量 </span><span class="positive">+4.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 12.53 (ATR 4.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位67% · PB分位0% ✅ · ROE 1.59%→ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">000688.SZ</div>  <div class="name">国城矿业</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+15.2%</span><br>  <span>5日动量 </span><span class="positive">+18.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 38.43 (ATR 7.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 12.61%↓ · +0.8</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 元件 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">301176.SZ</div>  <div class="name">逸豪新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+62.0%</span><br>  <span>5日动量 </span><span class="positive">+71.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 58.58 (ATR 6.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位0% ✅ · ROE 0.63%↑ · +0.8</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">603186.SH</div>  <div class="name">华正新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+65.8%</span><br>  <span>5日动量 </span><span class="positive">+37.7%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 163.01 (ATR 6.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位33% · ROE 1.52%↓ · +1.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">000636.SZ</div>  <div class="name">风华高科</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+99.9%</span><br>  <span>5日动量 </span><span class="positive">+17.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 55.52 (ATR 7.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位0% ✅ · ROE 0.71%↓ · +1.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">600183.SH</div>  <div class="name">生益科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+47.1%</span><br>  <span>5日动量 </span><span class="positive">+24.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 145.52 (ATR 6.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位67% · ROE 6.68%↓ · +1.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(63, 65%, 48%);">5.2</div><div class="stock-info">  <div class="code">002138.SZ</div>  <div class="name">顺络电子</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+46.0%</span><br>  <span>5日动量 </span><span class="positive">+10.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 53.96 (ATR 6.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位50% · ROE 2.71%↓ · +1.4</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(0, 65%, 48%);">📌 通信设备 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">300570.SZ</div>  <div class="name">太辰光</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+31.3%</span><br>  <span>5日动量 </span><span class="positive">+44.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 188.26 (ATR 7.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位33% · ROE 3.78%↓ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">600498.SH</div>  <div class="name">烽火通信</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+13.5%</span><br>  <span>5日动量 </span><span class="positive">+24.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 58.74 (ATR 6.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位33% · PB分位0% ✅ · ROE 0.22%↓ · +1.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">688143.SH</div>  <div class="name">长盈通</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+38.5%</span><br>  <span>5日动量 </span><span class="positive">+2.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 153.36 (ATR 9.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 0.44%↓ · +0.8</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(43, 65%, 48%);">3.6</div><div class="stock-info">  <div class="code">600487.SH</div>  <div class="name">亨通光电</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+31.1%</span><br>  <span>5日动量 </span><span class="positive">+4.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 85.73 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 3.44%↓ · +1.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">300620.SZ</div>  <div class="name">光库科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+17.5%</span><br>  <span>5日动量 </span><span class="positive">+14.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 289.77 (ATR 7.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位67% · PB分位67% · ROE 2.05%↓ · +0.6</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(28, 65%, 48%);">📌 玻璃玻纤 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(28, 65%, 48%);">2.3</div><div class="stock-info">  <div class="code">603256.SH</div>  <div class="name">宏和科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+58.9%</span><br>  <span>5日动量 </span><span class="positive">+21.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 196.71 (ATR 7.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位75% · PB分位75% · ROE 6.34%↓ · +0.8</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(0, 65%, 48%);">0.0</div><div class="stock-info">  <div class="code">300196.SZ</div>  <div class="name">长海股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+24.4%</span><br>  <span>5日动量 </span><span class="positive">+22.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 23.34 (ATR 7.2%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 1.67%→ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002080.SZ</div>  <div class="name">中材科技</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-11.2%</span><br>  <span>5日动量 </span><span class="positive">+15.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 58.34 (ATR 7.2%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位50% · ROE 2.51%→ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(41, 65%, 48%);">3.4</div><div class="stock-info">  <div class="code">601636.SH</div>  <div class="name">旗滨集团</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-4.5%</span><br>  <span>5日动量 </span><span class="positive">+5.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 6.18 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 0.09%↓ · +0.0</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">601112.SH</div>  <div class="name">振石股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-23.0%</span><br>  <span>5日动量 </span><span class="positive">+10.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 16.88 (ATR 3.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位25% ✅ · PB分位25% ✅ · ROE 3.91%↓ · +1.4</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(120, 65%, 48%);">📌 专业工程 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">603929.SH</div>  <div class="name">亚翔集成</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+23.9%</span><br>  <span>5日动量 </span><span class="positive">+15.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 186.20 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位50% · ROE 10.27%→ · +1.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(113, 65%, 48%);">9.4</div><div class="stock-info">  <div class="code">601133.SH</div>  <div class="name">柏诚股份</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+10.9%</span><br>  <span>5日动量 </span><span class="positive">+19.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 27.97 (ATR 6.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位0% ✅ · ROE 1.03%→ · +1.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(62, 65%, 48%);">5.2</div><div class="stock-info">  <div class="code">002051.SZ</div>  <div class="name">中工国际</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+17.3%</span><br>  <span>5日动量 </span><span class="positive">+4.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 9.96 (ATR 7.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位0% ✅ · ROE 0.67%↓ · +1.0</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002469.SZ</div>  <div class="name">三维化学</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+6.7%</span><br>  <span>5日动量 </span><span class="positive">+6.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 6.40 (ATR 4.1%)</span>  </div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(111, 65%, 48%);">9.2</div><div class="stock-info">  <div class="code">000065.SZ</div>  <div class="name">北方国际</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+7.4%</span><br>  <span>5日动量 </span><span class="positive">+5.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 11.06 (ATR 5.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位50% · ROE 0.99%↓ · +1.3</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(76, 65%, 48%);">📌 航空装备Ⅱ (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(76, 65%, 48%);">6.3</div><div class="stock-info">  <div class="code">300581.SZ</div>  <div class="name">晨曦航空</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+16.8%</span><br>  <span>5日动量 </span><span class="positive">+25.7%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 11.63 (ATR 5.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位80% · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(56, 65%, 48%);">4.7</div><div class="stock-info">  <div class="code">688297.SH</div>  <div class="name">中无人机</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+21.9%</span><br>  <span>5日动量 </span><span class="positive">+7.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 43.88 (ATR 4.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位75% · PB分位40% · ROE 0.29%→ · +0.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">688237.SH</div>  <div class="name">超卓航科</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+13.8%</span><br>  <span>5日动量 </span><span class="positive">+12.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 47.79 (ATR 4.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位20% ✅ · ROE 0.3%↓ · +0.9</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">002297.SZ</div>  <div class="name">博云新材</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+2.4%</span><br>  <span>5日动量 </span><span class="positive">+16.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 19.42 (ATR 8.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位25% ✅ · PB分位60% · ROE 6.03%↑ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(112, 65%, 48%);">9.3</div><div class="stock-info">  <div class="code">600862.SH</div>  <div class="name">中航高科</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+6.1%</span><br>  <span>5日动量 </span><span class="positive">+8.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 17.89 (ATR 3.2%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 3.21%→ · +1.7</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(74, 65%, 48%);">📌 农商行Ⅱ (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(74, 65%, 48%);">6.2</div><div class="stock-info">  <div class="code">601860.SH</div>  <div class="name">紫金银行</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+3.1%</span><br>  <span>5日动量 </span><span class="positive">+1.9%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 2.58 (ATR 1.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位80% · PB分位40% · ROE 2.09%↓ · +0.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(45, 65%, 48%);">3.8</div><div class="stock-info">  <div class="code">603323.SH</div>  <div class="name">苏农银行</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+2.0%</span><br>  <span>5日动量 </span><span class="positive">+3.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 4.74 (ATR 1.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位60% · ROE 2.42%↓ · +1.4</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(70, 65%, 48%);">5.9</div><div class="stock-info">  <div class="code">600908.SH</div>  <div class="name">无锡银行</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+0.2%</span><br>  <span>5日动量 </span><span class="positive">+3.0%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 5.39 (ATR 1.8%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位60% · PB分位80% · ROE 2.72%↓ · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(86, 65%, 48%);">7.1</div><div class="stock-info">  <div class="code">002958.SZ</div>  <div class="name">青农商行</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-0.0%</span><br>  <span>5日动量 </span><span class="positive">+1.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 2.83 (ATR 1.6%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位40% · PB分位0% ✅ · ROE 2.79%↓ · +1.3</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(72, 65%, 48%);">6.0</div><div class="stock-info">  <div class="code">601528.SH</div>  <div class="name">瑞丰银行</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-1.1%</span><br>  <span>5日动量 </span><span class="positive">+2.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 4.65 (ATR 2.0%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位20% ✅ · PB分位20% ✅ · ROE 2.12%↓ · +1.3</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(76, 65%, 48%);">📌 炼化及贸易 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(76, 65%, 48%);">6.3</div><div class="stock-info">  <div class="code">600028.SH</div>  <div class="name">中国石化</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+5.4%</span><br>  <span>5日动量 </span><span class="positive">+1.8%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 4.78 (ATR 2.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位0% ✅ · ROE 2.04%→ · +0.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(66, 65%, 48%);">5.5</div><div class="stock-info">  <div class="code">600688.SH</div>  <div class="name">上海石化</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+9.3%</span><br>  <span>5日动量 </span><span class="negative">-8.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 2.69 (ATR 5.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位50% · ROE 1.78%↑ · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">000096.SZ</div>  <div class="name">广聚能源</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-4.4%</span><br>  <span>5日动量 </span><span class="positive">+0.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 7.43 (ATR 3.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位33% · PB分位0% ✅ · ROE 0.44%↓ · +1.2</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(50, 65%, 48%);">4.2</div><div class="stock-info">  <div class="code">600256.SH</div>  <div class="name">广汇能源</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+0.7%</span><br>  <span>5日动量 </span><span class="negative">-7.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 5.36 (ATR 5.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位67% · PB分位33% · ROE 0.97%↓ · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">001316.SZ</div>  <div class="name">润贝航科</div></div><div class="stock-metrics">  <span>超额 </span><span class="negative">-25.6%</span><br>  <span>5日动量 </span><span class="positive">+17.1%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 33.44 (ATR 6.4%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位67% · ROE 4.53%↓ · +1.5</span></div></div>
+</div></div>
+<div class="stock-card"><div class="stock-card-header" style="border-bottom-color:hsl(120, 65%, 48%);">📌 旅游及景区 (5只)</div><div class="stock-card-body"><div class="stock-row"><div class="stock-score" style="background:hsl(120, 65%, 48%);">10.0</div><div class="stock-info">  <div class="code">600593.SH</div>  <div class="name">大连圣亚</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+18.3%</span><br>  <span>5日动量 </span><span class="positive">+11.7%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 36.06 (ATR 5.1%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 7.8%↓ · +0.5</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(75, 65%, 48%);">6.2</div><div class="stock-info">  <div class="code">300859.SZ</div>  <div class="name">西域旅游</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+11.2%</span><br>  <span>5日动量 </span><span class="negative">-0.4%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 27.95 (ATR 3.5%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位50% · PB分位67% · +0.7</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(70, 65%, 48%);">5.8</div><div class="stock-info">  <div class="code">600054.SH</div>  <div class="name">黄山旅游</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+5.5%</span><br>  <span>5日动量 </span><span class="positive">+4.6%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 10.57 (ATR 2.7%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PE分位0% ✅ · PB分位0% ✅ · ROE 0.72%→ · +1.6</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(40, 65%, 48%);">3.4</div><div class="stock-info">  <div class="code">000524.SZ</div>  <div class="name">岭南控股</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+3.8%</span><br>  <span>5日动量 </span><span class="positive">+3.5%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 8.74 (ATR 3.3%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">ROE 1.43%↓ · +0.1</span></div></div>
+<div class="stock-row"><div class="stock-score" style="background:hsl(73, 65%, 48%);">6.1</div><div class="stock-info">  <div class="code">000430.SZ</div>  <div class="name">张家界</div></div><div class="stock-metrics">  <span>超额 </span><span class="positive">+6.5%</span><br>  <span>5日动量 </span><span class="negative">-3.3%</span>  <br><span style="font-size:.7rem;color:#94a3b8;">🛑 7.16 (ATR 4.9%)</span>  <br><span style="font-size:.7rem;color:#6366f1;">PB分位33% · ROE 19.52%↑ · +1.6</span></div></div>
+</div></div>
+
+  </div>
+</div>
+
+
+<div class="section">
+  <div class="section-title">🛡️ 风控与监控 (第四+五阶段)</div>
+  <div class="summary">
+    
+        <div class="summary-card" style="border-left-color:#dc2626;background:#fef2f2;">
+          <h3>🌐 宏观状态: BEAR</h3>
+          <div style="font-size:1.2rem;font-weight:700;color:#dc2626;">建议2-3成仓位</div>
+          <div style="font-size:.8rem;color:#64748b;margin-top:6px;">ADX=30.5(强趋势) | 价格<4708(MA200之下)</div>
+          <div style="font-size:.78rem;color:#94a3b8;">ADX=30.5 | MA50=4808.0 | MA200=4708.0</div>
+        </div>
+    
+        <div class="summary-card" style="border-left-color:#22c55e;background:#f0fdf4;">
+          <h3>✅ 拥挤度正常</h3>
+          <div style="font-size:.9rem;color:#16a34a;">无行业触发拥挤预警</div>
+        </div>
+    
+        <div class="summary-card" style="border-left-color:#6366f1;">
+          <h3>📊 虚拟持仓</h3>
+          <div style="font-size:1.2rem;font-weight:700;">NAV: 1.2073 (+20.73%)</div>
+          <div style="font-size:.8rem;color:#64748b;">85 只持仓 | 65 新开 0 平仓</div>
+        </div>
+    
+        <div class="summary-card" style="border-left-color:#f59e0b;background:#fffbeb;">
+          <h3>⚠️ 异常归因: 有1项异常</h3>
+          <div style="font-size:.82rem;margin-top:4px;">• 选股突变: 精选个股数从 20 变为 85（变化 325%），可能因行业持续性排名大幅调整</div>
+        </div>
+  </div>
+</div>
+
+
+<div class="footer">
+  <div class="status-grid">
+    <div class="status-item"><span class="status-dot dot-success"></span> module0: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> module1: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> module2: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> module2_l3: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> module3: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> regime: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> weekly_filter: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> crowding: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> atr: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> data_update: 成功</div><div class="status-item"><span class="status-dot dot-warning"></span> module0_l2: 降级</div><div class="status-item"><span class="status-dot dot-success"></span> module2_l2: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> moneyflow: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> fundamental: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> ml_rerank: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> margin: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> portfolio: 成功</div><div class="status-item"><span class="status-dot dot-success"></span> anomaly: 成功</div>
+  </div>
+  <div style="font-size:0.78rem;">
+    📦 行业数据: 31个行业 · 140014条记录 · 最新 20260612<br>
+    📦 个股数据: 3000只检测 · 0只更新 (+0条)
+  </div>
+  <div class="disclaimer">
+    ⚠️ 本报告由 A股趋势交易系统 自动生成，仅供研究参考，不构成投资建议。<br>
+    数据来源: Tushare / akshare · 生成时间: 2026-06-15 22:05:58 CST
+  </div>
+</div>
+
+</body>
+</html>

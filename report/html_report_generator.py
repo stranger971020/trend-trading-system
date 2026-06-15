@@ -350,6 +350,8 @@ def generate_html_report(
     crowding_result: dict | None = None,
     portfolio_result: dict | None = None,
     anomaly_result: dict | None = None,
+    time_slot: str = "evening",
+    persistence_trend: dict | None = None,
 ) -> str:
     """生成自包含 HTML 报告。
 
@@ -425,6 +427,10 @@ def generate_html_report(
 
     # === 持续性量化参考 ===
     parts.append(_build_persistence_legend())
+
+    # === 持续性趋势 ===
+    if persistence_trend:
+        parts.append(_build_trend_section(persistence_trend))
 
     # === 二、投资方向 ===
     if l2_leading_result is not None:
@@ -831,6 +837,40 @@ def _build_l3_direction(l3_leading: dict, l3_persistence: dict) -> str:
   </div>
 </div>
 """
+
+
+def _build_trend_section(trend_data: dict) -> str:
+    """持续性得分趋势追踪。"""
+    if not trend_data:
+        return ""
+    rows = ""
+    # 从 persistence_result 获取 name 映射
+    for code, scores in sorted(trend_data.items(), key=lambda x: -(x[1][-1][1] if x[1] else 0)):
+        if len(scores) < 2:
+            continue
+        name = scores[-1][2] if len(scores[-1]) > 2 else code
+        latest_score = scores[-1][1]
+        prev_score = scores[0][1] if len(scores) == 2 else scores[-2][1]
+        delta = latest_score - prev_score
+        delta_str = f"{delta:+.1f}" if delta != 0 else "—"
+        delta_color = "#16a34a" if delta > 0 else ("#dc2626" if delta < 0 else "#94a3b8")
+        bars = ""
+        for item in scores[-10:]:
+            sc = item[1]
+            bars += f'<span title="{item[0]}: {sc:.1f}" style="display:inline-block;width:7px;height:14px;background:{_color_for_score(sc)};margin-right:1px;border-radius:1px;vertical-align:middle;"></span>'
+        rows += f'<tr><td>{scores[-1][0]}</td><td>{name}</td><td>{bars}</td><td><b>{latest_score:.1f}</b></td><td style="color:{delta_color};font-weight:600;">{delta_str}</td></tr>\n'
+
+    if not rows:
+        return ""
+    return f"""
+<div class="section">
+  <div class="section-title">📈 持续性趋势追踪（Top-10 L1 行业）</div>
+  <p style="font-size:.78rem;color:#94a3b8;margin-bottom:8px;">近10日持续性得分变化，颜色越绿越好。需要积累2天以上历史数据。</p>
+  <table class="ranking-table">
+    <thead><tr><th>最新日期</th><th>行业</th><th>趋势</th><th>最新分</th><th>变化</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</div>""" if rows else ""
 
 
 def _build_module2(persistence_result: dict) -> str:

@@ -2,14 +2,16 @@
 """
 A股趋势交易系统 - 主入口
 用法:
-    python3 run_analysis.py                # 正常执行（检查交易日）
+    python3 run_analysis.py                # 正常执行（检查交易日，晚间完整报告）
+    python3 run_analysis.py --morning      # 早间模式（仅更新行业数据，重新选股）
     python3 run_analysis.py --force        # 强制执行（跳过交易日检查）
     python3 run_analysis.py --dry-run      # 干跑（不发送 Telegram）
     python3 run_analysis.py --html-only    # 仅生成 HTML 报告（不推送）
 
 输出:
-    - reports/report_YYYYMMDD.html  每日 HTML 报告
-    - reports/latest.html           最新报告（可做 GitHub Pages 入口）
+    - reports/report_YYYYMMDD_HHMM.html  每日 HTML 报告（早晚各一份）
+    - reports/latest_morning.html         最新早间报告
+    - reports/latest.html                 最新晚间报告
     - Telegram 推送（除非 --dry-run 或 --html-only）
 """
 
@@ -106,12 +108,13 @@ logger = logging.getLogger("run_analysis")
 # 主流程
 # ============================================================
 
-def main(force: bool = False, dry_run: bool = False) -> bool:
+def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> bool:
     """执行完整分析流程。
 
     Args:
         force: 跳过交易日检查
         dry_run: 跳过 Telegram 推送
+        morning: 早间模式（跳过个股数据下载）
 
     Returns:
         True 如果整体执行成功
@@ -258,6 +261,9 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     try:
         persistence_result = analyze_persistence(daily_df, mapping)
         module_status["module2"] = persistence_result.get("status", "failed")
+        # 保存持续性历史趋势
+        if persistence_result.get("status") == "success" and persistence_result.get("df") is not None:
+            _save_persistence_history(persistence_result["df"], morning)
     except Exception as e:
         logger.error("模块2异常: %s", e, exc_info=True)
         persistence_result = {"status": "failed", "error": str(e)}
@@ -354,9 +360,13 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
         stock_mapping = load_stock_industry_mapping()
         logger.info("已加载 %d 只个股的行业映射", len(stock_mapping))
 
-        # 7b. 全量拉取所有个股日线数据（首次~18分钟，后续增量~30秒）
+        # 7b. 全量拉取所有个股日线数据（早间模式跳过，晚间首次~18分钟，后续增量~30秒）
         all_stock_codes = sorted(stock_mapping.keys())
-        stock_summary = fetch_all_stocks(DB_PATH, all_stock_codes)
+        if morning:
+            logger.info("早间模式：跳过个股数据下载，使用已有数据")
+            stock_summary = {"total_stocks": len(all_stock_codes), "updated": 0, "new_rows": 0}
+        else:
+            stock_summary = fetch_all_stocks(DB_PATH, all_stock_codes)
         data_summary["stocks_fetched"] = stock_summary.get("total_stocks", 0)
         data_summary["stocks_updated"] = stock_summary.get("updated", 0)
         data_summary["stocks_new_rows"] = stock_summary.get("new_rows", 0)
@@ -589,9 +599,17 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     try:
         reports_dir = os.path.join(PROJECT_ROOT, "reports")
         os.makedirs(reports_dir, exist_ok=True)
-        report_date = data_summary.get("latest_date", datetime.now().strftime("%Y%m%d"))
-        html_filename = f"report_{report_date}.html"
+        now = datetime.now()
+        time_slot = "morning" if morning else "evening"
+        report_date = data_summary.get("latest_date", now.strftime("%Y%m%d"))
+        html_filename = f"report_{report_date}_{time_slot}.html"
         html_path = os.path.join(reports_dir, html_filename)
+
+        # 持续性趋势数据
+        trend_codes = []
+        if persistence_result.get("df") is not None:
+            trend_codes = persistence_result["df"].head(10)["ts_code"].tolist()
+        persistence_trend = _load_persistence_trend(trend_codes) if trend_codes else {}
 
         html_content = generate_html_report(
             sentiment_result=sentiment_result,
@@ -607,13 +625,18 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
             crowding_result=crowding_result,
             portfolio_result=portfolio_result,
             anomaly_result=anomaly_result,
+            time_slot=time_slot,
+            persistence_trend=persistence_trend,
         )
 
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # 同时写入 latest.html
-        latest_path = os.path.join(reports_dir, "latest.html")
+        # latest 链接
+        if morning:
+            latest_path = os.path.join(reports_dir, "latest_morning.html")
+        else:
+            latest_path = os.path.join(reports_dir, "latest.html")
         with open(latest_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
@@ -644,8 +667,13 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
     if not dry_run:
         logger.info("=" * 40)
         logger.info("Telegram 推送...")
+        # 附加 GitHub 报告链接
+        report_filename = f"report_{report_date}_{time_slot}.html"
+        github_url = f"https://github.com/stranger971020/trend-trading-system/blob/main/reports/{report_filename}"
+        report_text_with_link = report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
+
         try:
-            push_result = send_report(report_text)
+            push_result = send_report(report_text_with_link)
             logger.info(
                 "推送结果: %d/%d 发送成功, %d 失败",
                 push_result["sent"],
@@ -695,6 +723,52 @@ def main(force: bool = False, dry_run: bool = False) -> bool:
 # CLI 入口
 # ============================================================
 
+def _save_persistence_history(df, morning: bool) -> None:
+    """保存持续性得分历史（用于趋势追踪）。"""
+    import json
+    history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_storage", "persistence_history.json")
+    today = datetime.now().strftime("%Y%m%d")
+    slot = "morning" if morning else "evening"
+
+    records = []
+    if os.path.exists(history_path):
+        with open(history_path, "r") as f:
+            records = json.load(f)
+
+    for _, row in df.iterrows():
+        records.append({
+            "date": today, "slot": slot,
+            "ts_code": row["ts_code"], "name": row["name"],
+            "score": row["persistence_score"],
+        })
+
+    # 保留最近 60 天
+    cutoff = (datetime.now() - timedelta(days=60)).strftime("%Y%m%d")
+    records = [r for r in records if r["date"] >= cutoff]
+
+    with open(history_path, "w") as f:
+        json.dump(records, f, ensure_ascii=False)
+
+    logger.debug("持续性历史已保存: %d 条记录", len(records))
+
+
+def _load_persistence_trend(top_codes: list[str], days: int = 10) -> dict:
+    """加载指定行业的持续性得分趋势。"""
+    import json
+    history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_storage", "persistence_history.json")
+    if not os.path.exists(history_path):
+        return {}
+    with open(history_path, "r") as f:
+        records = json.load(f)
+
+    trend = {}
+    for code in top_codes:
+        items = [(r["date"], r["score"], r.get("name", code)) for r in records if r["ts_code"] == code]
+        items.sort(key=lambda x: x[0])
+        trend[code] = items[-days:] if len(items) >= 2 else items
+    return trend
+
+
 def _git_push_reports(report_date: str) -> None:
     """自动推送 reports/ 目录到 GitHub。"""
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -735,6 +809,7 @@ if __name__ == "__main__":
     force = "--force" in sys.argv
     dry_run = "--dry-run" in sys.argv
     html_only = "--html-only" in sys.argv
+    morning = "--morning" in sys.argv
 
     if "--help" in sys.argv or "-h" in sys.argv:
         print(__doc__)
@@ -744,5 +819,5 @@ if __name__ == "__main__":
     if html_only:
         dry_run = True
 
-    success = main(force=force, dry_run=dry_run)
+    success = main(force=force, dry_run=dry_run, morning=morning)
     sys.exit(0 if success else 1)
