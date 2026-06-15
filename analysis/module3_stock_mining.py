@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # 不选股的行业（保留在板块分析中，但不纳入个股推荐）
 EXCLUDED_KEYWORDS = ["银行", "证券", "保险", "城商行", "金融", "信托", "期货"]
-TOP_N_INDUSTRIES = 7       # 从持续性排名前 N 的行业中选股
+TOP_N_INDUSTRIES = 20      # 从持续性排名前 N 的行业中选股
 MIN_L3_STOCKS = 8          # L3 行业最少成分股数（过滤微型行业）
 
 
