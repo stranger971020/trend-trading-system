@@ -9,6 +9,8 @@ import logging
 
 import pandas as pd
 
+from config import HIGH_PERSISTENCE, MEDIUM_PERSISTENCE
+
 from config import (
     COL_TRADE_DATE,
     COL_TS_CODE,
@@ -123,9 +125,9 @@ def apply_weekly_filter(
 
 
 def _relabel(score: float) -> str:
-    if score >= 7:
+    if score >= HIGH_PERSISTENCE:
         return "🔥高持续性"
-    elif score >= 5:
+    elif score >= MEDIUM_PERSISTENCE:
         return "⚡中等持续性"
     else:
         return "⚠️低持续性"

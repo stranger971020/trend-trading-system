@@ -4,7 +4,7 @@
 - 比 L3 粒度更适合投资方向判断
 """
 import logging, numpy as np, pandas as pd
-from config import MOMENTUM_LOOKBACK, L3_LEADING_THRESHOLD, L3_STRONG_LEADING
+from config import MOMENTUM_LOOKBACK, L2_LEADING_THRESHOLD, L2_STRONG_LEADING
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,13 @@ def analyze_l2_leading(l2_df, l1_df):
             l2_ret = (l2_p.iloc[-1]/l2_p.iloc[-(MOMENTUM_LOOKBACK+1)]-1)*100
             l1_ret = (l1_p.iloc[-1]/l1_p.iloc[-(MOMENTUM_LOOKBACK+1)]-1)*100
             excess = l2_ret - l1_ret
-            label = "🔥强烈领先" if excess>=L3_STRONG_LEADING else ("⚡领先" if excess>=L3_LEADING_THRESHOLD else ("同步" if excess>=0 else "落后"))
+            label = "🔥强烈领先" if excess>=L2_STRONG_LEADING else ("⚡领先" if excess>=L2_LEADING_THRESHOLD else ("同步" if excess>=0 else "落后"))
             records.append({"l2_code":code,"l2_name":l2_name,"parent_l1":parent,"parent_name":pname,"l2_return_20d":round(l2_ret,2),"excess_momentum":round(excess,2),"label":label})
         if not records: result["status"]="degraded"; result["error"]="无有效数据"; return result
         df = pd.DataFrame(records).sort_values("excess_momentum", ascending=False)
         df["rank"] = range(1, len(df)+1)
-        leading = df[df["excess_momentum"]>=L3_LEADING_THRESHOLD]
-        strong = df[df["excess_momentum"]>=L3_STRONG_LEADING]
+        leading = df[df["excess_momentum"]>=L2_LEADING_THRESHOLD]
+        strong = df[df["excess_momentum"]>=L2_STRONG_LEADING]
         by_l1 = {}
         for _, r in leading.iterrows():
             pn = r["parent_name"] or r["parent_l1"]

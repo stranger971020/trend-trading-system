@@ -19,6 +19,7 @@ from config import (
     DB_PATH,
     DATA_DIR,
     BEIJING_TZ_OFFSET,
+    MOMENTUM_LOOKBACK,
     COL_TRADE_DATE,
     COL_TS_CODE,
     COL_CLOSE,
@@ -87,11 +88,11 @@ def build_feature_matrix(
         if multi_day:
             # 对每个有效日期生成特征
             for i in range(21, n):
-                mom20 = (closes[i] / closes[i - 20] - 1) * 100 if closes[i - 20] > 0 else 0
+                mom20 = (closes[i] / closes[i - MOMENTUM_LOOKBACK] - 1) * 100 if closes[i - MOMENTUM_LOOKBACK] > 0 else 0
                 mom5 = (closes[i] / closes[i - 5] - 1) * 100 if closes[i - 5] > 0 else 0
-                ma20 = closes[i - 20:i].mean()
+                ma20 = closes[i - MOMENTUM_LOOKBACK:i].mean()
                 ma20_dev = (closes[i] / ma20 - 1) * 100 if ma20 > 0 else 0
-                vol_ratio = vols[i] / vols[i - 20:i].mean() if vols[i - 20:i].mean() > 0 else 1
+                vol_ratio = vols[i] / vols[i - MOMENTUM_LOOKBACK:i].mean() if vols[i - MOMENTUM_LOOKBACK:i].mean() > 0 else 1
 
                 # ATR
                 tr_vals = []
@@ -115,12 +116,18 @@ def build_feature_matrix(
         else:
             # 仅最新日期
             i = n - 1
-            mom20 = (closes[i] / closes[i - 20] - 1) * 100 if closes[i - 20] > 0 else 0
+            mom20 = (closes[i] / closes[i - MOMENTUM_LOOKBACK] - 1) * 100 if closes[i - MOMENTUM_LOOKBACK] > 0 else 0
             mom5 = (closes[i] / closes[i - 5] - 1) * 100 if closes[i - 5] > 0 else 0
-            ma20 = closes[i - 20:i].mean()
+            ma20 = closes[i - MOMENTUM_LOOKBACK:i].mean()
             ma20_dev = (closes[i] / ma20 - 1) * 100 if ma20 > 0 else 0
-            vol_ratio = vols[i] / vols[i - 20:i].mean() if vols[i - 20:i].mean() > 0 else 1
-            atr_pct = 0
+            vol_ratio = vols[i] / vols[i - MOMENTUM_LOOKBACK:i].mean() if vols[i - MOMENTUM_LOOKBACK:i].mean() > 0 else 1
+            # ATR（与训练路径一致）
+            tr_vals = []
+            for j in range(i - 13, i + 1):
+                tr = max(highs[j] - lows[j], abs(highs[j] - closes[j - 1]), abs(lows[j] - closes[j - 1]))
+                tr_vals.append(tr)
+            atr_val = np.mean(tr_vals)
+            atr_pct = (atr_val / closes[i] * 100) if closes[i] > 0 else 0
 
             features.append({
                 COL_TS_CODE: code, COL_TRADE_DATE: dates[i],

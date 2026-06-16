@@ -76,6 +76,47 @@ def _persistence_class(score: float) -> tuple[str, str, str]:
         return "低持续性", "#dc2626", "#fef2f2"
 
 
+_FOLD_COUNTER = 0
+
+
+def _fold_id() -> str:
+    """生成唯一的折叠区域 ID。"""
+    global _FOLD_COUNTER
+    _FOLD_COUNTER += 1
+    return f"fold-{_FOLD_COUNTER}"
+
+
+def _build_fold_button(fold_id: str, hidden_count: int) -> str:
+    """生成折叠/展开按钮 HTML。"""
+    return (
+        f'<button class="toggle-btn" onclick="toggleFold(this,\'{fold_id}\')" '
+        f'data-label="{hidden_count}项">▸ 展开全部 ({hidden_count}项)</button>'
+    )
+
+
+def _render_table_with_fold(
+    visible_rows: str,
+    hidden_rows: str,
+    hidden_count: int,
+    fold_id: str,
+) -> str:
+    """将可见行和隐藏行包裹为带折叠按钮的表格结构。
+
+    在调用此函数之前，<table> 和 <thead> 应该已经在 visible_rows 之前输出，
+    visible_rows 应该以 </tbody> 结束。
+    """
+    if hidden_count <= 0:
+        return visible_rows
+
+    return (
+        f"{visible_rows}\n"
+        f'<tbody id="{fold_id}" style="display:none;">\n'
+        f"{hidden_rows}\n"
+        f"</tbody>\n"
+        f"{_build_fold_button(fold_id, hidden_count)}"
+    )
+
+
 # ============================================================
 # CSS 样式（内嵌）
 # ============================================================
@@ -319,6 +360,17 @@ body {
 .footer .dot-skipped { background: #94a3b8; }
 .footer .disclaimer { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
 
+/* ===== COLLAPSIBLE ===== */
+.toggle-btn {
+    display: inline-block; padding: 6px 16px; margin-top: 8px;
+    border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #f8fafc; color: #475569;
+    font-size: 0.8rem; cursor: pointer;
+    text-align: center;
+    user-select: none;
+}
+.toggle-btn:hover { background: #e2e8f0; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 640px) {
     body { padding: 8px; }
@@ -352,6 +404,7 @@ def generate_html_report(
     anomaly_result: dict | None = None,
     time_slot: str = "evening",
     persistence_trend: dict | None = None,
+    stock_derived_industry_result: dict | None = None,
 ) -> str:
     """生成自包含 HTML 报告。
 
@@ -367,6 +420,7 @@ def generate_html_report(
         l3_persistence_result: 模块2 L3 持续性输出（可选）
         regime_result: 宏观状态机输出（可选）
         crowding_result: 拥挤度预警输出（可选）
+        stock_derived_industry_result: 个股推算行业指标输出（可选）
 
     Returns:
         完整的 HTML 字符串
@@ -401,6 +455,16 @@ def generate_html_report(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>A股趋势交易系统 · 日报 {date_str}</title>
 <style>{CSS}</style>
+<script>
+function toggleFold(btn, tbodyId) {{
+    var tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    var hidden = tbody.style.display === 'none' || tbody.style.display === '';
+    tbody.style.display = hidden ? 'table-row-group' : 'none';
+    var label = btn.getAttribute('data-label');
+    btn.textContent = hidden ? '▸ 收起' : ('▸ 展开全部 (' + label + ')');
+}}
+</script>
 </head>
 <body>
 """)
@@ -421,8 +485,8 @@ def generate_html_report(
 
     # === 一、大盘研判 ===
     l1_date = data_summary.get("latest_date", "N/A")
-    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与趋势 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l1_date})</span></div>""")
-    parts.append(_build_module1(sentiment_result, persistence_result))
+    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#6366f1;border-top:2px solid #6366f1;border-bottom:2px solid #6366f1;">一、大盘研判 — 申万一级行业 · 整体情绪与持续性 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l1_date})</span></div>""")
+    parts.append(_build_module1(sentiment_result))
     parts.append(_build_module2(persistence_result))
 
     # === 持续性量化参考 ===
@@ -438,14 +502,23 @@ def generate_html_report(
         parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#16a34a;border-top:2px solid #16a34a;border-bottom:2px solid #16a34a;">二、投资方向 — 申万二级行业 · ETF/赛道选择 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(数据: {l2_date})</span></div>""")
         parts.append(_build_l2_section(l2_leading_result, l2_persistence_result))
 
-    # === 三、个股精选 ===
+    # === 三、个股推算行业指标 ===
+    if stock_derived_industry_result is not None and stock_derived_industry_result.get("status") == "success":
+        sd_date = data_summary.get("stock_latest_date", "N/A")
+        parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#8b5cf6;border-top:2px solid #8b5cf6;border-bottom:2px solid #8b5cf6;">三、个股推算行业指标 — 基于个股数据自下而上整合 <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股数据: {sd_date})</span></div>""")
+        parts.append(_build_stock_derived_industry(stock_derived_industry_result))
+
+    # === 四、个股精选 ===
     stock_date = data_summary.get("stock_latest_date", "N/A")
     mf_date = data_summary.get("moneyflow_latest_date", "N/A")
-    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">三、个股精选 — 从强势三级行业中优选（已排除银行/非银金融） <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股: {stock_date} | 资金流: {mf_date})</span></div>""")
+    source_level = stock_result.get("source_level", "二级")
+    source_label = "二级行业" if source_level == "L2" else ("一级行业" if source_level == "L1" else "三级行业")
+    parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">四、个股精选 — 从强势{source_label}中优选（已排除银行/非银金融） <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股: {stock_date} | 资金流: {mf_date})</span></div>""")
     parts.append(_build_module3(stock_result))
 
-    # === 风控汇总 ===
+    # === 五、风控汇总 ===
     if regime_result or crowding_result:
+        parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#f59e0b;border-top:2px solid #f59e0b;border-bottom:2px solid #f59e0b;">五、风控与监控</div>""")
         parts.append(_build_risk_section(regime_result, crowding_result, portfolio_result, anomaly_result))
 
     # ---- Footer ----
@@ -529,36 +602,15 @@ def _build_executive_summary(sentiment_result: dict, l3_leading_result: dict | N
 """
 
 
-def _build_module1(sentiment_result: dict, persistence_result: dict) -> str:
-    """构建模块1：市场情绪详览 + 动量分布图。"""
-    # 从 persistence df 获取各行业的动量数据
-    df = persistence_result.get("df")
-    if df is None or df.empty:
-        return """<div class="section"><div class="section-title">📋 模块1: 市场情绪详览</div><p>数据不足</p></div>"""
+def _build_module1(sentiment_result: dict) -> str:
+    """构建合并模块第一部分：4 统计大数 + MACD 顶背离预警。
 
-    # 按 return_20d_pct 排序用于柱状图
-    if "return_20d_pct" in df.columns:
-        chart_df = df.sort_values("return_20d_pct", ascending=True).copy()
-        max_ret = max(abs(chart_df["return_20d_pct"].max()), abs(chart_df["return_20d_pct"].min()), 5)
-    else:
-        chart_df = df.copy()
-        max_ret = 10
-
-    # 动量分布柱状图
-    bars_html = ""
-    for _, row in chart_df.iterrows():
-        name = str(row.get("name", ""))
-        ret = float(row.get("return_20d_pct", 0))
-        pct = _bar_width(abs(ret), max_ret, 0)
-        color = "#ef4444" if ret > 0 else "#22c55e"  # A股红涨绿跌
-        bar_style = f"width:{pct}%;background:{color};"
-        bars_html += (
-            f'<div class="bar-row">'
-            f'<span class="name">{name}</span>'
-            f'<span class="bar-wrap"><span class="bar-fill" style="{bar_style}"></span></span>'
-            f'<span class="val" style="color:{color}">{_sign(ret)}{ret:.1f}%</span>'
-            f'</div>\n'
-        )
+    动量分布柱状图已整合到 _build_module2 的表格中（20日动量列）。
+    """
+    bullish = sentiment_result.get("bullish_count", 0)
+    bearish = sentiment_result.get("bearish_count", 0)
+    neutral = sentiment_result.get("neutral_count", 0)
+    total = bullish + bearish + neutral
 
     # 顶背离预警
     warnings = sentiment_result.get("divergence_warnings", [])
@@ -574,14 +626,9 @@ def _build_module1(sentiment_result: dict, persistence_result: dict) -> str:
   <p style="color:#166534;">当前无行业触发 MACD 顶背离，市场结构健康。</p>
 </div>"""
 
-    bullish = sentiment_result.get("bullish_count", 0)
-    bearish = sentiment_result.get("bearish_count", 0)
-    neutral = sentiment_result.get("neutral_count", 0)
-    total = bullish + bearish + neutral
-
     return f"""
 <div class="section">
-  <div class="section-title">📋 模块1: 市场情绪与动量分布</div>
+  <div class="section-title">📋 市场情绪与板块持续性</div>
 
   <div class="dist-stats">
     <div class="dist-stat" style="background:#fef2f2;">
@@ -602,88 +649,7 @@ def _build_module1(sentiment_result: dict, persistence_result: dict) -> str:
     </div>
   </div>
 
-  <p style="font-size:0.85rem;color:#64748b;margin-bottom:8px;">
-    📊 31个申万一级行业 20日动量分布（红涨绿跌）
-  </p>
-  <div class="bar-chart">
-    {bars_html}
-  </div>
-
   {warn_html}
-</div>
-"""
-
-
-def _build_module0(l3_leading_result: dict) -> str:
-    """构建模块0：三级行业领先信号。"""
-    status = l3_leading_result.get("status")
-    if status != "success":
-        return ""
-
-    df = l3_leading_result.get("df")
-    leading_count = l3_leading_result.get("leading_count", 0)
-    strong = l3_leading_result.get("strong_leading", [])
-
-    if df is None or df.empty:
-        return ""
-
-    # 取前15和后5
-    top15 = df.head(15)
-    bottom5 = df.tail(5)
-
-    rows = ""
-    for _, row in top15.iterrows():
-        excess = float(row["excess_momentum"])
-        color = _color_for_score(max(0, excess + 5), 20)
-        bar_w = _bar_width(excess + 10, 30, 0)
-        rows += (
-            f'<tr>'
-            f'<td class="rank">{int(row["rank"])}</td>'
-            f'<td>{row["l3_name"]}</td>'
-            f'<td style="color:#64748b;font-size:0.8rem;">{row["parent_name"]}</td>'
-            f'<td><span class="mini-bar" style="width:{bar_w}px;background:{color};"></span>'
-            f'{_sign(excess)}{excess:.1f}%</td>'
-            f'<td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td>'
-            f'</tr>\n'
-        )
-
-    # 强烈领先标签（避免 f-string 内引号转义问题）
-    strong_tags = ""
-    if strong:
-        tags = []
-        for s in strong[:10]:
-            tags.append(f"{s['name']}({_sign(s['excess'])}{s['excess']:.1f}%)")
-        strong_tags = "<p style='margin-bottom:8px;'><b>🔥 强烈领先:</b> " + "、".join(tags) + "</p>"
-
-    # 领先统计摘要
-    leading_summary = ""
-    if leading_count > 0:
-        leading_summary = (
-            f'共 <b style="color:#6366f1;">{leading_count}</b> 个三级行业领先（超额≥2%），'
-            f'其中 <b style="color:#dc2626;">{len(strong)}</b> 个强烈领先（≥5%）'
-        )
-
-    return f"""
-<div class="section">
-  <div class="section-title">🔍 模块0: 三级行业领先信号</div>
-  <p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">
-    三级行业相对其所属一级行业的超额动量排名。
-    {leading_summary}
-  </p>
-
-  {strong_tags}
-
-  <div style="overflow-x:auto;">
-  <table class="ranking-table">
-    <thead>
-      <tr><th>#</th><th>三级行业</th><th>所属一级</th><th>超额动量</th><th>强度</th></tr>
-    </thead>
-    <tbody>{rows}</tbody>
-  </table>
-  </div>
-  <p style="font-size:0.78rem;color:#94a3b8;margin-top:8px;">
-    📊 共 {len(df)} 个三级行业参评。超额动量 = L3_20日收益 − 所属L1_20日收益
-  </p>
 </div>
 """
 
@@ -725,7 +691,8 @@ def _build_persistence_legend() -> str:
 
 
 def _build_l2_section(l2_leading, l2_persistence):
-    """L2 投资方向：领先信号 + 持续性排名。"""
+    """L2 投资方向：领先信号 + 持续性排名（带折叠）。"""
+    FOLD_THRESHOLD = 5
     ldf = l2_leading.get("df") if l2_leading else None
     pdf = l2_persistence.get("df") if l2_persistence else None
 
@@ -735,12 +702,28 @@ def _build_l2_section(l2_leading, l2_persistence):
         leading_count = l2_leading.get("leading_count", 0)
         strong = l2_leading.get("strong_leading", [])
         top15 = ldf.head(15)
-        rows = ""
-        for _, row in top15.iterrows():
+        total_rows = len(top15)
+        hidden_count = max(0, total_rows - FOLD_THRESHOLD)
+        fold_id = _fold_id() if hidden_count > 0 else ""
+
+        vis_rows = ""
+        hid_rows = ""
+        for i, (_, row) in enumerate(top15.iterrows()):
             excess = float(row["excess_momentum"])
             color = _color_for_score(max(0, excess + 5), 20)
             bar_w = _bar_width(excess + 10, 30, 0)
-            rows += f'<tr><td class="rank">{int(row["rank"])}</td><td>{row["l2_name"]}</td><td style="color:#64748b;font-size:.8rem;">{row["parent_name"]}</td><td><span class="mini-bar" style="width:{bar_w}px;background:{color};"></span>{_sign(excess)}{excess:.1f}%</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+            row_html = f'<tr><td class="rank">{int(row["rank"])}</td><td>{row["l2_name"]}</td><td style="color:#64748b;font-size:.8rem;">{row["parent_name"]}</td><td><span class="mini-bar" style="width:{bar_w}px;background:{color};"></span>{_sign(excess)}{excess:.1f}%</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+            if i < FOLD_THRESHOLD:
+                vis_rows += row_html
+            else:
+                hid_rows += row_html
+
+        fold_html = ""
+        if hidden_count > 0:
+            fold_html = (
+                f'<tbody id="{fold_id}" style="display:none;">\n{hid_rows}</tbody>\n'
+                f'{_build_fold_button(fold_id, hidden_count)}'
+            )
 
         strong_tags = ""
         if strong:
@@ -751,100 +734,140 @@ def _build_l2_section(l2_leading, l2_persistence):
   <div class="section-title">🔍 L2 领先信号</div>
   <p style="font-size:.85rem;color:#64748b;margin-bottom:8px;">二级行业相对其所属一级行业的超额动量排名。共 <b>{leading_count}</b> 个领先。</p>
   {strong_tags}
-  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>所属一级</th><th>超额动量</th><th>强度</th></tr></thead><tbody>{rows}</tbody></table>
+  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>所属一级</th><th>超额动量</th><th>强度</th></tr></thead><tbody>{vis_rows}</tbody>{fold_html}</table>
   <p style="font-size:.78rem;color:#94a3b8;margin-top:4px;">共 {len(ldf)} 个 L2 参评</p>
 </div>""")
 
     # Persistence
     if pdf is not None and not pdf.empty:
         top = pdf.head(20)
-        rows2 = ""
-        for _, row in top.iterrows():
+        total_rows = len(top)
+        hidden_count = max(0, total_rows - FOLD_THRESHOLD)
+        fold_id2 = _fold_id() if hidden_count > 0 else ""
+
+        vis_rows2 = ""
+        hid_rows2 = ""
+        for i, (_, row) in enumerate(top.iterrows()):
             ps = float(row["persistence_score"])
             color = _color_for_score(ps)
-            rows2 += f'<tr><td class="rank">{int(row.get("rank",0))}</td><td>{row["name"]}</td><td><span class="mini-bar" style="width:{_bar_width(ps,10)}px;background:{color};"></span>{ps:.2f}</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+            row_html = f'<tr><td class="rank">{int(row.get("rank",0))}</td><td>{row["name"]}</td><td><span class="mini-bar" style="width:{_bar_width(ps,10)}px;background:{color};"></span>{ps:.2f}</td><td><span class="p-badge" style="color:{color};background:#f8fafc;">{row["label"]}</span></td></tr>\n'
+            if i < FOLD_THRESHOLD:
+                vis_rows2 += row_html
+            else:
+                hid_rows2 += row_html
+
+        fold_html2 = ""
+        if hidden_count > 0:
+            fold_html2 = (
+                f'<tbody id="{fold_id2}" style="display:none;">\n{hid_rows2}</tbody>\n'
+                f'{_build_fold_button(fold_id2, hidden_count)}'
+            )
+
         parts.append(f"""<div class="section">
   <div class="section-title">📊 L2 持续性 Top-20</div>
-  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>持续性得分</th><th>判定</th></tr></thead><tbody>{rows2}</tbody></table>
+  <table class="ranking-table"><thead><tr><th>#</th><th>二级行业</th><th>持续性得分</th><th>判定</th></tr></thead><tbody>{vis_rows2}</tbody>{fold_html2}</table>
 </div>""")
 
     return "\n".join(parts) if parts else ""
 
 
-def _build_l3_direction(l3_leading: dict, l3_persistence: dict) -> str:
-    """构建 L3 投资方向：按 L1 父级分组展示强势 L3。"""
-    pdf = l3_persistence.get("df")
-    ldf = l3_leading.get("df")
+def _build_stock_derived_industry(result: dict) -> str:
+    """构建个股推算行业指标章节。
 
-    if pdf is None or pdf.empty:
+    展示基于个股数据自下而上整合的 L2 行业动量指标。
+    """
+    df = result.get("df")
+    if df is None or df.empty:
         return ""
 
-    # 只展示中等持续性以上的 L3
-    from config import MEDIUM_PERSISTENCE
-    strong_l3 = pdf[pdf["persistence_score"] >= MEDIUM_PERSISTENCE].head(30)
+    from config import STOCK_DERIVED_TOP_N
 
-    # 按 L1 父级分组 (从 L3 leading 数据中查找 parent)
-    l3_to_parent = {}
-    if ldf is not None and not ldf.empty:
-        for _, row in ldf.iterrows():
-            l3_to_parent[row["l3_code"]] = row.get("parent_name", "")
+    top_n = min(STOCK_DERIVED_TOP_N, len(df))
+    df = df.head(top_n)
 
-    # 手工分组
-    groups: dict[str, list] = {}
-    for _, row in strong_l3.iterrows():
-        code = row["ts_code"]
-        name = row["name"]
-        score = row["persistence_score"]
-        parent = l3_to_parent.get(code, "其他")
-        if parent not in groups:
-            groups[parent] = []
-        groups[parent].append((name, score, code))
+    FOLD_THRESHOLD = 5
+    total_rows = len(df)
+    hidden_count = max(0, total_rows - FOLD_THRESHOLD)
+    fold_id = _fold_id() if hidden_count > 0 else ""
 
-    if not groups:
-        return ""
+    max_ret = max(abs(df["avg_return_20d"].max()), abs(df["avg_return_20d"].min()), 5)
 
-    cards = ""
-    for parent_name, items in sorted(groups.items(), key=lambda x: -max(s for _, s, _ in x[1])):
-        if not parent_name:
-            continue
-        item_html = ""
-        for name, score, code in items[:8]:
-            bar_w = int(score / 10 * 120)
-            color = _color_for_score(score)
-            item_html += (
-                f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.8rem;">'
-                f'<span style="min-width:80px;text-align:right;color:#475569;">{name}</span>'
-                f'<span style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;">'
-                f'<span style="display:block;height:100%;width:{bar_w}px;background:{color};border-radius:3px;"></span></span>'
-                f'<span style="font-weight:600;min-width:36px;">{score:.1f}</span>'
-                f'</div>'
-            )
-        cards += (
-            f'<div style="background:#fff;border-radius:8px;padding:12px;border-left:4px solid {_color_for_score(max(s for _,s,_ in items))};">'
-            f'<b style="font-size:.9rem;">📌 {parent_name}</b>'
-            f'{item_html}'
-            f'</div>'
+    visible_rows = ""
+    hidden_rows = ""
+    for i, (_, row) in enumerate(df.iterrows()):
+        rank = int(row.get("rank", i + 1))
+        l2_name = str(row.get("l2_name", ""))
+        count = int(row.get("stock_count", 0))
+        avg_ret = float(row.get("avg_return_20d", 0))
+        med_ret = float(row.get("median_return_20d", 0))
+        pct_pos = float(row.get("pct_positive", 0))
+        pct_ma = float(row.get("pct_above_ma20", 0))
+
+        # 迷你柱状图和颜色
+        bar_w = _bar_width(abs(avg_ret), max_ret, 0)
+        ret_color = "#ef4444" if avg_ret > 0 else "#22c55e"
+        pos_color = _color_for_score(pct_pos, 100)
+
+        row_html = (
+            f'<tr>'
+            f'<td class="rank">{rank}</td>'
+            f'<td class="sector-name">{l2_name}</td>'
+            f'<td style="text-align:center;">{count}</td>'
+            f'<td>'
+            f'  <span class="mini-bar" style="width:{bar_w}px;background:{ret_color};"></span>'
+            f'  <span style="color:{ret_color};font-weight:600;">{_sign(avg_ret)}{avg_ret:.1f}%</span>'
+            f'</td>'
+            f'<td style="color:{ret_color};">{_sign(med_ret)}{med_ret:.1f}%</td>'
+            f'<td><span class="mini-bar" style="width:{int(pct_pos/100*60)}px;background:{pos_color};"></span>{pct_pos:.0f}%</td>'
+            f'<td>{pct_ma:.0f}%</td>'
+            f'</tr>\n'
+        )
+
+        if i < FOLD_THRESHOLD:
+            visible_rows += row_html
+        else:
+            hidden_rows += row_html
+
+    fold_html = ""
+    if hidden_count > 0:
+        fold_html = (
+            f'<tbody id="{fold_id}" style="display:none;">\n'
+            f'{hidden_rows}'
+            f'</tbody>\n'
+            f'{_build_fold_button(fold_id, hidden_count)}'
         )
 
     return f"""
 <div class="section">
-  <div class="section-title">🎯 L3 投资方向（按一级行业分组）</div>
-  <p style="font-size:.82rem;color:#64748b;margin-bottom:12px;">
-    展示各一级行业下属的三级子行业持续性得分。高分三级行业 = ETF/赛道投资方向。
+  <div class="section-title">📊 个股推算 L2 行业指标（自下而上）</div>
+  <p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">
+    基于 {result.get("l2_count", 0)} 个 L2 行业的成分股数据整合计算。
+    个股日线数据聚合 → 行业级别指标，与个股数据时效性一致。
   </p>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
-    {cards}
+  <div style="overflow-x:auto;">
+  <table class="ranking-table">
+    <thead>
+      <tr>
+        <th>#</th><th>二级行业</th><th>成分股数</th>
+        <th>平均20日动量</th><th>中位数动量</th><th>上涨比例</th><th>站上MA20</th>
+      </tr>
+    </thead>
+    <tbody>
+      {visible_rows}
+    </tbody>
+    {fold_html}
+  </table>
   </div>
 </div>
 """
 
 
 def _build_trend_section(trend_data: dict) -> str:
-    """持续性得分趋势追踪。"""
+    """持续性得分趋势追踪（带折叠）。"""
     if not trend_data:
         return ""
-    rows = ""
-    # 从 persistence_result 获取 name 映射
+    FOLD_THRESHOLD = 5
+    all_rows = []
     for code, scores in sorted(trend_data.items(), key=lambda x: -(x[1][-1][1] if x[1] else 0)):
         if len(scores) < 2:
             continue
@@ -858,48 +881,75 @@ def _build_trend_section(trend_data: dict) -> str:
         for item in scores[-10:]:
             sc = item[1]
             bars += f'<span title="{item[0]}: {sc:.1f}" style="display:inline-block;width:7px;height:14px;background:{_color_for_score(sc)};margin-right:1px;border-radius:1px;vertical-align:middle;"></span>'
-        rows += f'<tr><td>{scores[-1][0]}</td><td>{name}</td><td>{bars}</td><td><b>{latest_score:.1f}</b></td><td style="color:{delta_color};font-weight:600;">{delta_str}</td></tr>\n'
+        all_rows.append(f'<tr><td>{scores[-1][0]}</td><td>{name}</td><td>{bars}</td><td><b>{latest_score:.1f}</b></td><td style="color:{delta_color};font-weight:600;">{delta_str}</td></tr>\n')
 
-    if not rows:
+    if not all_rows:
         return ""
+
+    total_rows = len(all_rows)
+    hidden_count = max(0, total_rows - FOLD_THRESHOLD)
+    fold_id = _fold_id() if hidden_count > 0 else ""
+    vis_rows = "".join(all_rows[:FOLD_THRESHOLD])
+    hid_rows = "".join(all_rows[FOLD_THRESHOLD:]) if hidden_count > 0 else ""
+
+    fold_html = ""
+    if hidden_count > 0:
+        fold_html = (
+            f'<tbody id="{fold_id}" style="display:none;">\n{hid_rows}</tbody>\n'
+            f'{_build_fold_button(fold_id, hidden_count)}'
+        )
+
     return f"""
 <div class="section">
-  <div class="section-title">📈 持续性趋势追踪（Top-10 L1 行业）</div>
+  <div class="section-title">📈 持续性趋势追踪（Top-{total_rows} L1 行业）</div>
   <p style="font-size:.78rem;color:#94a3b8;margin-bottom:8px;">近10日持续性得分变化，颜色越绿越好。需要积累2天以上历史数据。</p>
   <table class="ranking-table">
     <thead><tr><th>最新日期</th><th>行业</th><th>趋势</th><th>最新分</th><th>变化</th></tr></thead>
-    <tbody>{rows}</tbody>
+    <tbody>{vis_rows}</tbody>
+    {fold_html}
   </table>
-</div>""" if rows else ""
+</div>"""
 
 
 def _build_module2(persistence_result: dict) -> str:
-    """构建模块2：板块持续性排名表格。"""
+    """构建持续性排名表格（含 20日动量列，折叠长列表）。"""
     df = persistence_result.get("df")
     if df is None or df.empty:
-        return """<div class="section"><div class="section-title">📊 模块2: 板块持续性排名</div><p>数据不足</p></div>"""
+        return """<div class="section"><div class="section-title">📊 板块持续性排名</div><p>数据不足</p></div>"""
 
-    # 计算用户看到的子因子最大值（用于迷你柱状图）
+    # 确保降序排列
+    df = df.sort_values("persistence_score", ascending=False).reset_index(drop=True)
+
+    # 子因子最大值（用于迷你柱状图）
     max_p = df["persistence_score"].max() if not df.empty else 10
     max_m = df["momentum_score"].max() if "momentum_score" in df.columns else 10
 
-    rows_html = ""
-    for _, row in df.iterrows():
-        rank = int(row.get("rank", 0))
+    FOLD_THRESHOLD = 5
+    total_rows = len(df)
+    hidden_count = max(0, total_rows - FOLD_THRESHOLD)
+    fold_id = _fold_id() if hidden_count > 0 else ""
+
+    visible_rows = ""
+    hidden_rows = ""
+    for i, (_, row) in enumerate(df.iterrows()):
+        rank = i + 1
         name = str(row.get("name", ""))
         pscore = float(row.get("persistence_score", 0))
         mscore = float(row.get("momentum_score", 0))
         rslope = float(row.get("return_slope", 0))
         tscore = float(row.get("turnover_score", 0))
         rscore = float(row.get("relative_strength", 0))
+        ret_20d = float(row.get("return_20d_pct", 0))
         label, color, bg = _persistence_class(pscore)
 
-        # 迷你柱状图
         p_bar_w = _bar_width(pscore, max_p)
         m_bar_w = _bar_width(mscore, max_m)
         bar_color = _color_for_score(pscore)
 
-        rows_html += (
+        # 20日动量颜色（红涨绿跌）
+        mom_color = "#ef4444" if ret_20d > 0 else "#22c55e" if ret_20d < 0 else "#64748b"
+
+        row_html = (
             f'<tr>'
             f'<td class="rank">{rank}</td>'
             f'<td class="sector-name">{name}</td>'
@@ -911,28 +961,45 @@ def _build_module2(persistence_result: dict) -> str:
             f'<td>{rslope:.2f}</td>'
             f'<td>{tscore:.2f}</td>'
             f'<td>{rscore:.2f}</td>'
+            f'<td style="color:{mom_color};font-weight:600;">{_sign(ret_20d)}{ret_20d:.1f}%</td>'
             f'<td><span class="p-badge" style="color:{color};background:{bg}">{label}</span></td>'
             f'</tr>\n'
         )
+
+        if i < FOLD_THRESHOLD:
+            visible_rows += row_html
+        else:
+            hidden_rows += row_html
 
     high_list = persistence_result.get("high_persistence", [])
     medium_list = persistence_result.get("medium_persistence", [])
     low_list = persistence_result.get("low_persistence", [])
 
+    fold_html = ""
+    if hidden_count > 0:
+        fold_html = (
+            f'<tbody id="{fold_id}" style="display:none;">\n'
+            f'{hidden_rows}'
+            f'</tbody>\n'
+            f'{_build_fold_button(fold_id, hidden_count)}'
+        )
+
     return f"""
 <div class="section">
-  <div class="section-title">📊 模块2: 板块持续性排名</div>
+  <div class="section-title">📊 板块持续性排名（含20日动量）</div>
   <div style="overflow-x:auto;">
   <table class="ranking-table">
     <thead>
       <tr>
         <th>#</th><th>行业</th><th>持续性得分</th>
-        <th>动量分</th><th>收益斜率</th><th>换手率</th><th>相对强度</th><th>判定</th>
+        <th>动量分</th><th>收益斜率</th><th>换手率</th><th>相对强度</th>
+        <th>20日动量</th><th>判定</th>
       </tr>
     </thead>
     <tbody>
-      {rows_html}
+      {visible_rows}
     </tbody>
+    {fold_html}
   </table>
   </div>
   <div class="table-summary">
@@ -951,7 +1018,7 @@ def _build_module3(stock_result: dict) -> str:
     if status in ("skipped", "failed", "degraded"):
         reason = stock_result.get("reason") or stock_result.get("error") or "未知原因"
         return f"""<div class="section">
-  <div class="section-title">🎯 模块3: 个股精选</div>
+  <div class="section-title">🎯 个股精选</div>
   <p style="color:#94a3b8;">{'⏭️ 跳过' if status == 'skipped' else '⚠️ 降级' if status == 'degraded' else '❌ 失败'}: {reason}</p>
 </div>"""
 
@@ -960,7 +1027,7 @@ def _build_module3(stock_result: dict) -> str:
 
     if not by_industry:
         return """<div class="section">
-  <div class="section-title">🎯 模块3: 个股精选</div>
+  <div class="section-title">🎯 个股精选</div>
   <p style="color:#94a3b8;">未筛选出符合条件的个股</p>
 </div>"""
 
@@ -974,9 +1041,11 @@ def _build_module3(stock_result: dict) -> str:
         for i, pick in enumerate(picks):
             score = pick["score"]
             excess = pick.get("excess_return", 0)
+            mom20d = pick.get("momentum_20d", 0)
             mom5d = pick.get("momentum_5d", 0)
             score_color = _color_for_score(score)
             exc_class = "positive" if excess > 0 else "negative"
+            mom20d_class = "positive" if mom20d > 0 else "negative"
             mom_class = "positive" if mom5d > 0 else "negative"
 
             stop_html = ""
@@ -1011,7 +1080,8 @@ def _build_module3(stock_result: dict) -> str:
                 f'</div>'
                 f'<div class="stock-metrics">'
                 f'  <span>超额 </span><span class="{exc_class}">{_sign(excess)}{excess:.1f}%</span><br>'
-                f'  <span>5日动量 </span><span class="{mom_class}">{_sign(mom5d)}{mom5d:.1f}%</span>'
+                f'  <span>20日 </span><span class="{mom20d_class}">{_sign(mom20d)}{mom20d:.1f}%</span> '
+                f'  <span>5日 </span><span class="{mom_class}">{_sign(mom5d)}{mom5d:.1f}%</span>'
                 f'  {stop_html}'
                 f'  {funda_html}'
                 f'</div>'
@@ -1029,10 +1099,11 @@ def _build_module3(stock_result: dict) -> str:
 
     return f"""
 <div class="section">
-  <div class="section-title">🎯 模块3: 个股精选</div>
+  <div class="section-title">🎯 个股精选</div>
   <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px;">
-    从持续性 Top-{min(7, len(by_industry))} 行业中精选 {len(stocks)} 只个股
-    （已排除银行/证券/保险类，评分 = 超额收益×50% + 5日动量×30% + MA20偏离×20%）
+    从持续性 Top-{len(by_industry)} 个 L2 行业中精选 {len(stocks)} 只个股（按持续性得分降序排列）
+    <br>评分由 ML LightGBM LambdaRank 模型综合多因子计算（含超额收益、20日动量、5日动量、MA偏离、基本面等）
+    （已排除银行/证券/保险类）
   </p>
   <div class="stock-grid">
     {cards_html}
@@ -1112,7 +1183,7 @@ def _build_risk_section(regime_result: dict | None, crowding_result: dict | None
 
     return f"""
 <div class="section">
-  <div class="section-title">🛡️ 风控与监控 (第四+五阶段)</div>
+  <div class="section-title">🛡️ 风控与监控</div>
   <div class="summary">
     {regime_html}
     {crowding_html}

@@ -12,6 +12,7 @@ import pandas as pd
 
 from config import (
     MOMENTUM_LOOKBACK,
+    RETURN_SLOPE_LOOKBACK,
     MACD_FAST,
     MACD_SLOW,
     MACD_SIGNAL,
@@ -167,10 +168,10 @@ def compute_momentum_sub_score(prices: pd.Series) -> float:
 
 
 def compute_return_slope(prices: pd.Series) -> float:
-    """计算 10 日收益斜率（百分比）。"""
-    if len(prices) < 11:
+    """计算收益斜率（百分比），回看窗口由 RETURN_SLOPE_LOOKBACK 配置。"""
+    if len(prices) < RETURN_SLOPE_LOOKBACK + 1:
         return 0.0
-    return float((prices.iloc[-1] / prices.iloc[-11] - 1) * 100)
+    return float((prices.iloc[-1] / prices.iloc[-(RETURN_SLOPE_LOOKBACK + 1)] - 1) * 100)
 
 
 def compute_turnover_ratio(volumes: pd.Series, lookback: int = MOMENTUM_LOOKBACK) -> float:
@@ -361,27 +362,6 @@ def analyze_persistence(
         result["error"] = str(e)
 
     return result
-
-
-def compute_l3_persistence(
-    l3_daily_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """计算三级行业的持续性得分（复用 L1 的 4 因子公式）。
-
-    与 compute_persistence 逻辑相同，但针对三级行业数据。
-    额外输出 parent_l1/parent_name 字段便于追溯。
-
-    Args:
-        l3_daily_df: 三级行业日线数据（含 parent_l1, parent_name 列）
-
-    Returns:
-        DataFrame，按 persistence_score 降序，包含 parent_l1/parent_name
-    """
-    if l3_daily_df is None or l3_daily_df.empty:
-        return pd.DataFrame()
-
-    # 重命名 ts_code→使用 l3_code（实际列名仍是 ts_code）
-    return compute_persistence(l3_daily_df, mapping=None)
 
 
 def analyze_l3_persistence(l3_daily_df: pd.DataFrame) -> dict:

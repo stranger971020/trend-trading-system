@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 
 # 不选股的行业（保留在板块分析中，但不纳入个股推荐）
 EXCLUDED_KEYWORDS = ["银行", "证券", "保险", "城商行", "金融", "信托", "期货"]
-TOP_N_INDUSTRIES = 20      # 从持续性排名前 N 的行业中选股
+TOP_N_INDUSTRIES = 6       # 从持续性排名前 N 的行业中选股
 MIN_L3_STOCKS = 8          # L3 行业最少成分股数（过滤微型行业）
+MIN_L2_STOCKS = 5          # L2 行业最少成分股数（L2 比 L3 更粗，阈值更低）
 
 
 # ============================================================
@@ -54,6 +55,13 @@ def compute_momentum_5d(stock_prices: pd.Series) -> float:
     if len(stock_prices) < 6:
         return 0.0
     return (stock_prices.iloc[-1] / stock_prices.iloc[-6] - 1) * 100
+
+
+def compute_momentum_20d(stock_prices: pd.Series) -> float:
+    """计算近20日动量（百分比）——中期趋势一致性。"""
+    if len(stock_prices) < MOMENTUM_LOOKBACK + 1:
+        return 0.0
+    return (stock_prices.iloc[-1] / stock_prices.iloc[-(MOMENTUM_LOOKBACK + 1)] - 1) * 100
 
 
 def compute_ma20_deviation(stock_prices: pd.Series) -> float:
@@ -202,12 +210,14 @@ def analyze_stocks(
                 prices = s_df[COL_CLOSE]
 
                 excess = compute_excess_return(prices, ind_prices)
+                mom20d = compute_momentum_20d(prices)
                 mom5d = compute_momentum_5d(prices)
                 ma20dev = compute_ma20_deviation(prices)
 
                 stock_scores.append({
                     "ts_code": ts_code,
                     "excess_return": excess,
+                    "momentum_20d": mom20d,
                     "momentum_5d": mom5d,
                     "ma20_deviation": ma20dev,
                 })
@@ -218,12 +228,14 @@ def analyze_stocks(
             # 归一化各项得分
             scores_df = pd.DataFrame(stock_scores)
             scores_df["excess_score"] = _minmax_normalize(scores_df["excess_return"])
+            scores_df["mom20d_score"] = _minmax_normalize(scores_df["momentum_20d"])
             scores_df["momentum_score"] = _minmax_normalize(scores_df["momentum_5d"])
             scores_df["ma20_score"] = _minmax_normalize(scores_df["ma20_deviation"])
 
             # 加权总分
             scores_df["total_score"] = (
                 scores_df["excess_score"] * w["excess_return"]
+                + scores_df["mom20d_score"] * w["momentum_20d"]
                 + scores_df["momentum_score"] * w["momentum_5d"]
                 + scores_df["ma20_score"] * w["ma20_deviation"]
             )
@@ -245,6 +257,7 @@ def analyze_stocks(
                     "name": stock_name,
                     "score": round(float(row["total_score"]), 2),
                     "excess_return": round(float(row["excess_return"]), 2),
+                    "momentum_20d": round(float(row["momentum_20d"]), 2),
                     "momentum_5d": round(float(row["momentum_5d"]), 2),
                     "ma20_deviation": round(float(row["ma20_deviation"]), 2),
                     "industry": ind_name,
@@ -266,6 +279,7 @@ def analyze_stocks(
 
         result["stocks"] = all_picks
         result["by_industry"] = by_industry
+        result["source_level"] = "L1"
         result["status"] = "success"
         result.pop("reason", None)
 
@@ -401,12 +415,14 @@ def analyze_stocks_l3(
 
                 prices = sdf[COL_CLOSE]
                 excess = compute_excess_return(prices, l3_prices)
+                mom20d = compute_momentum_20d(prices)
                 mom5d = compute_momentum_5d(prices)
                 ma20dev = compute_ma20_deviation(prices)
 
                 stock_scores.append({
                     "ts_code": ts_code,
                     "excess_return": excess,
+                    "momentum_20d": mom20d,
                     "momentum_5d": mom5d,
                     "ma20_deviation": ma20dev,
                 })
@@ -416,10 +432,12 @@ def analyze_stocks_l3(
 
             scores_df = pd.DataFrame(stock_scores)
             scores_df["excess_score"] = _minmax_normalize(scores_df["excess_return"])
+            scores_df["mom20d_score"] = _minmax_normalize(scores_df["momentum_20d"])
             scores_df["momentum_score"] = _minmax_normalize(scores_df["momentum_5d"])
             scores_df["ma20_score"] = _minmax_normalize(scores_df["ma20_deviation"])
             scores_df["total_score"] = (
                 scores_df["excess_score"] * w["excess_return"]
+                + scores_df["mom20d_score"] * w["momentum_20d"]
                 + scores_df["momentum_score"] * w["momentum_5d"]
                 + scores_df["ma20_score"] * w["ma20_deviation"]
             )
@@ -439,6 +457,7 @@ def analyze_stocks_l3(
                     "name": stock_name,
                     "score": round(float(row["total_score"]), 2),
                     "excess_return": round(float(row["excess_return"]), 2),
+                    "momentum_20d": round(float(row["momentum_20d"]), 2),
                     "momentum_5d": round(float(row["momentum_5d"]), 2),
                     "ma20_deviation": round(float(row["ma20_deviation"]), 2),
                     "industry": l3_name,
@@ -458,6 +477,7 @@ def analyze_stocks_l3(
         all_picks.sort(key=lambda x: x["score"], reverse=True)
         result["stocks"] = all_picks
         result["by_industry"] = by_industry
+        result["source_level"] = "L3"
         result["status"] = "success"
 
         logger.info("模块3(L3): 从 %d 个 L3 行业选出 %d 只个股", len(by_industry), len(all_picks))
@@ -492,7 +512,7 @@ def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_resu
         for info in stock_mapping.values():
             l2c = info.get("l2_code", "")
             l2_stock_counts[l2c] = l2_stock_counts.get(l2c, 0) + 1
-        valid_codes = {c for c, n in l2_stock_counts.items() if n >= MIN_L3_STOCKS}
+        valid_codes = {c for c, n in l2_stock_counts.items() if n >= MIN_L2_STOCKS}
         l2df = l2df[l2df["ts_code"].isin(valid_codes)]
         target = l2df.nlargest(TOP_N_INDUSTRIES, "persistence_score")
         if target.empty: result["status"] = "degraded"; result["reason"] = "无符合条件的L2行业"; return result
@@ -505,7 +525,9 @@ def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_resu
                 l2_prices_map[code] = grp["close"]
         w = STOCK_SCORE_WEIGHTS
         all_picks = []; by_industry = {}
-        for l2_code in sorted(target_codes):
+        # 按持续性得分降序遍历 target 行业（而非代码字母序）
+        for _, trow in target.iterrows():
+            l2_code = trow["ts_code"]
             industry_stocks = [c for c, info in stock_mapping.items() if info.get("l2_code") == l2_code]
             if not industry_stocks: continue
             stock_group = stock_daily_df[stock_daily_df["ts_code"].isin(industry_stocks)]
@@ -519,15 +541,22 @@ def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_resu
                 if len(sdf) < MOMENTUM_LOOKBACK + 1: continue
                 prices = sdf["close"]
                 excess = compute_excess_return(prices, l2_prices)
+                mom20d = compute_momentum_20d(prices)
                 mom5d = compute_momentum_5d(prices)
                 ma20dev = compute_ma20_deviation(prices)
-                stock_scores.append({"ts_code": ts_code, "excess_return": excess, "momentum_5d": mom5d, "ma20_deviation": ma20dev})
+                stock_scores.append({"ts_code": ts_code, "excess_return": excess,
+                                     "momentum_20d": mom20d, "momentum_5d": mom5d,
+                                     "ma20_deviation": ma20dev})
             if not stock_scores: continue
             sdf2 = pd.DataFrame(stock_scores)
             sdf2["excess_score"] = _minmax_normalize(sdf2["excess_return"])
+            sdf2["mom20d_score"] = _minmax_normalize(sdf2["momentum_20d"])
             sdf2["momentum_score"] = _minmax_normalize(sdf2["momentum_5d"])
             sdf2["ma20_score"] = _minmax_normalize(sdf2["ma20_deviation"])
-            sdf2["total_score"] = sdf2["excess_score"]*w["excess_return"] + sdf2["momentum_score"]*w["momentum_5d"] + sdf2["ma20_score"]*w["ma20_deviation"]
+            sdf2["total_score"] = (sdf2["excess_score"] * w["excess_return"]
+                                 + sdf2["mom20d_score"] * w["momentum_20d"]
+                                 + sdf2["momentum_score"] * w["momentum_5d"]
+                                 + sdf2["ma20_score"] * w["ma20_deviation"])
             sdf2 = sdf2.sort_values("total_score", ascending=False)
             top_n = sdf2.head(MODULE3_TOP_N)
             industry_picks = []
@@ -536,6 +565,7 @@ def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_resu
                 stock_name = stock_mapping[ts_code].get("stock_name", ts_code) if ts_code in stock_mapping else ts_code
                 pick = {"ts_code": ts_code, "name": stock_name, "score": round(float(row["total_score"]), 2),
                         "excess_return": round(float(row["excess_return"]), 2),
+                        "momentum_20d": round(float(row["momentum_20d"]), 2),
                         "momentum_5d": round(float(row["momentum_5d"]), 2),
                         "ma20_deviation": round(float(row["ma20_deviation"]), 2),
                         "industry": l2_name, "industry_code": l2_code}
@@ -546,7 +576,7 @@ def analyze_stocks_l2(stock_daily_df=None, l2_daily_df=None, l2_persistence_resu
         all_picks = [p for p in all_picks if not _fin(p.get("industry", ""))]
         by_industry = {k: v for k, v in by_industry.items() if not _fin(k)}
         all_picks.sort(key=lambda x: x["score"], reverse=True)
-        result["stocks"] = all_picks; result["by_industry"] = by_industry; result["status"] = "success"
+        result["stocks"] = all_picks; result["by_industry"] = by_industry; result["source_level"] = "L2"; result["status"] = "success"
         logger.info("模块3(L2): 从 %d 个 L2 行业选出 %d 只个股", len(by_industry), len(all_picks))
     except Exception as e:
         logger.error("模块3 L2 失败: %s", e, exc_info=True)

@@ -80,6 +80,7 @@ from analysis.ml_model import load_model, rerank_with_ml, build_feature_matrix
 from analysis.margin_warning import fetch_today_margin, detect_margin_divergence
 from analysis.virtual_portfolio import update_portfolio, get_portfolio_summary
 from analysis.anomaly_detector import detect_anomalies
+from analysis.module_stock_derived_industry import analyze_stock_derived_industry
 from report.report_generator import generate_report
 from report.html_report_generator import generate_html_report
 from notify.telegram_sender import send_report
@@ -261,9 +262,6 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     try:
         persistence_result = analyze_persistence(daily_df, mapping)
         module_status["module2"] = persistence_result.get("status", "failed")
-        # 保存持续性历史趋势
-        if persistence_result.get("status") == "success" and persistence_result.get("df") is not None:
-            _save_persistence_history(persistence_result["df"], morning)
     except Exception as e:
         logger.error("模块2异常: %s", e, exc_info=True)
         persistence_result = {"status": "failed", "error": str(e)}
@@ -430,6 +428,9 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             )
             persistence_result["df"] = persistence_df_adjusted
             persistence_result["weekly_filter_applied"] = True
+        # 保存持续性历史趋势（周线过滤后的最终分数，与排名表一致）
+        if persistence_result.get("status") == "success" and persistence_result.get("df") is not None:
+            _save_persistence_history(persistence_result["df"], morning)
         module_status["weekly_filter"] = "success"
     except Exception as e:
         logger.error("周线过滤失败: %s", e)
@@ -455,6 +456,27 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         module_status["atr"] = "failed"
 
     data_summary["crowding_count"] = len(crowding_result.get("crowded_industries", [])) if crowding_result else 0
+
+    # ---- 个股推算行业指标 ----
+    stock_derived_industry_result = None
+    try:
+        if stock_daily_df is not None and not stock_daily_df.empty and stock_mapping:
+            stock_derived_industry_result = analyze_stock_derived_industry(
+                stock_daily_df=stock_daily_df,
+                stock_mapping=stock_mapping,
+            )
+            module_status["stock_derived"] = stock_derived_industry_result.get("status", "failed")
+            logger.info(
+                "个股推算行业指标: %s, %d 个 L2 行业",
+                stock_derived_industry_result.get("status"),
+                stock_derived_industry_result.get("l2_count", 0),
+            )
+        else:
+            module_status["stock_derived"] = "skipped"
+    except Exception as e:
+        logger.error("个股推算行业指标失败: %s", e)
+        module_status["stock_derived"] = "failed"
+        stock_derived_industry_result = {"status": "failed", "error": str(e)}
 
     # ---- 统一提取各数据源最新日期 ----
     try:
@@ -588,6 +610,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             stock_result=stock_result,
             module_status=module_status,
             data_summary=data_summary,
+            stock_derived_industry_result=stock_derived_industry_result,
         )
         logger.info("文字报告生成完成 (%d 字符)", len(report_text))
     except Exception as e:
@@ -627,6 +650,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             anomaly_result=anomaly_result,
             time_slot=time_slot,
             persistence_trend=persistence_trend,
+            stock_derived_industry_result=stock_derived_industry_result,
         )
 
         with open(html_path, "w", encoding="utf-8") as f:

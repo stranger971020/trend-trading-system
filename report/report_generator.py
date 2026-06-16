@@ -38,6 +38,7 @@ def generate_report(
     stock_result: dict,
     module_status: dict,
     data_summary: dict,
+    stock_derived_industry_result: dict | None = None,
 ) -> str:
     """生成完整的分析报告。
 
@@ -47,6 +48,7 @@ def generate_report(
         stock_result: 模块3输出
         module_status: {"module1": "success", "module2": "success", ...}
         data_summary: {"latest_date": "20260613", "industries_updated": 31, "total_rows": 155}
+        stock_derived_industry_result: 个股推算行业指标输出（可选）
 
     Returns:
         格式化的 HTML 报告文本
@@ -64,9 +66,9 @@ def generate_report(
     lines.append(f"生成时间: {time_str} CST")
     lines.append("")
 
-    # ==================== 模块1：市场情绪 ====================
+    # ==================== 一、市场情绪与板块持续性（合并） ====================
     lines.append("━" * 20)
-    lines.append("<b>模块1: 市场情绪与择时</b>")
+    lines.append("<b>一、市场情绪与板块持续性</b>")
     lines.append("━" * 20)
 
     if sentiment_result.get("status") == "success":
@@ -98,35 +100,33 @@ def generate_report(
         lines.append(f"⚠️ 情绪判定: 数据不足，无法完整分析")
         lines.append(f"原因: {sentiment_result.get('error', '未知')}")
     else:
-        lines.append(f"❌ 模块1失败: {sentiment_result.get('error', '未知错误')}")
+        lines.append(f"❌ 市场情绪分析失败: {sentiment_result.get('error', '未知错误')}")
 
     lines.append("")
 
-    # ==================== 模块2：板块持续性 ====================
-    lines.append("━" * 20)
-    lines.append("<b>模块2: 板块持续性排名</b>")
-    lines.append("━" * 20)
-
+    # 板块持续性排名
     if persistence_result.get("status") == "success":
         df = persistence_result.get("df")
         if df is not None and not df.empty:
+            df = df.sort_values("persistence_score", ascending=False)
             lines.append(
-                f"<code>{'排名':<4} {'板块':<10} {'持续性':<8} {'动量':<8} {'收益':<8} {'换手':<8} {'强度':<8}</code>"
+                f"<code>{'排名':<4} {'板块':<10} {'持续性':<8} {'动量':<8} {'收益':<8} {'换手':<8} {'强度':<8} {'20日动量':<10}</code>"
             )
 
-            for _, row in df.iterrows():
-                rank = int(row.get("rank", 0))
+            for i, (_, row) in enumerate(df.iterrows()):
+                rank = i + 1
                 name = str(row.get("name", ""))[:10]
                 pscore = row.get("persistence_score", 0)
                 mscore = row.get("momentum_score", 0)
                 rslope = row.get("return_slope", 0)
                 tscore = row.get("turnover_score", 0)
                 rscore = row.get("relative_strength", 0)
+                ret20 = row.get("return_20d_pct", 0)
                 label = str(row.get("label", ""))
 
                 lines.append(
                     f"<code>{rank:>3}  {name:<10} {pscore:<8.2f} {mscore:<8.2f} "
-                    f"{rslope:<8.2f} {tscore:<8.2f} {rscore:<8.2f}</code>  {label}"
+                    f"{rslope:<8.2f} {tscore:<8.2f} {rscore:<8.2f} {ret20:<+9.1f}%</code>  {label}"
                 )
 
             # 统计
@@ -141,13 +141,40 @@ def generate_report(
     elif persistence_result.get("status") == "degraded":
         lines.append(f"⚠️ 板块分析降级: {persistence_result.get('error', '')}")
     else:
-        lines.append(f"❌ 模块2失败: {persistence_result.get('error', '未知错误')}")
+        lines.append(f"❌ 板块持续性分析失败: {persistence_result.get('error', '未知错误')}")
 
     lines.append("")
 
-    # ==================== 模块3：个股挖掘 ====================
+    # ==================== 二、个股推算行业指标 ====================
+    if stock_derived_industry_result is not None and stock_derived_industry_result.get("status") == "success":
+        lines.append("━" * 20)
+        lines.append("<b>二、个股推算行业指标（自下而上）</b>")
+        lines.append("━" * 20)
+
+        sdf = stock_derived_industry_result.get("df")
+        if sdf is not None and not sdf.empty:
+            from config import STOCK_DERIVED_TOP_N
+            top_n = min(STOCK_DERIVED_TOP_N, len(sdf))
+            sdf = sdf.head(top_n)
+            lines.append(f"基于个股数据整合的 L2 行业指标（Top-{top_n}）:")
+            lines.append("")
+            lines.append(f"<code>{'排名':<4} {'二级行业':<12} {'成分股':<6} {'平均动量':<10} {'中位动量':<10} {'上涨比':<6} {'站上MA20':<8}</code>")
+            for i, (_, row) in enumerate(sdf.iterrows()):
+                lines.append(
+                    f"<code>{i+1:>3}  {str(row.get('l2_name','')):<12} "
+                    f"{int(row.get('stock_count',0)):<6} "
+                    f"{float(row.get('avg_return_20d',0)):>+9.1f}% "
+                    f"{float(row.get('median_return_20d',0)):>+9.1f}% "
+                    f"{float(row.get('pct_positive',0)):>5.0f}% "
+                    f"{float(row.get('pct_above_ma20',0)):>7.0f}%</code>"
+                )
+        else:
+            lines.append("⚠️ 无足够数据推算行业指标")
+        lines.append("")
+
+    # ==================== 三、个股挖掘 ====================
     lines.append("━" * 20)
-    lines.append("<b>模块3: 个股精选</b>")
+    lines.append("<b>三、个股精选（从强势二级行业中优选）</b>")
     lines.append("━" * 20)
 
     if stock_result.get("status") == "success":
@@ -155,20 +182,22 @@ def generate_report(
         by_industry = stock_result.get("by_industry", {})
 
         if stocks:
-            lines.append(f"从 {len(by_industry)} 个行业中精选 {len(stocks)} 只个股:")
+            lines.append(f"从持续性 Top-{len(by_industry)} 个 L2 行业（按持续性降序）中精选 {len(stocks)} 只个股:")
             lines.append("")
 
-            # 按行业分组展示
+            # 按行业分组展示（行业已按持续性得分降序）
             for ind_name, picks in by_industry.items():
                 lines.append(f"<b>▸ {ind_name}</b>")
                 for pick in picks:
                     excess_str = _format_pct(pick.get("excess_return", 0))
-                    mom_str = _format_pct(pick.get("momentum_5d", 0))
+                    mom20d_str = _format_pct(pick.get("momentum_20d", 0))
+                    mom5d_str = _format_pct(pick.get("momentum_5d", 0))
                     lines.append(
                         f"  <code>{pick['ts_code']:<12} {pick['name']:<8} "
                         f"评分:{pick['score']:<5.2f} "
                         f"超额:{excess_str:<8} "
-                        f"5日动量:{mom_str}</code>"
+                        f"20日:{mom20d_str:<8} "
+                        f"5日:{mom5d_str}</code>"
                     )
                 lines.append("")
         else:
