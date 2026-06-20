@@ -167,6 +167,19 @@ def compute_momentum_sub_score(prices: pd.Series) -> float:
     return rsi_score * 0.25 + macd_score * 0.25 + bb_score * 0.25 + trend_score * 0.25
 
 
+def compute_momentum_stability(prices: pd.Series, lookback: int = MOMENTUM_LOOKBACK) -> float:
+    """计算动量稳定性（20日回归R²，0-10）。"""
+    if len(prices) < lookback + 1:
+        return 5.0
+    y = prices.iloc[-lookback:].values
+    x = np.arange(len(y))
+    if np.std(y) > 0 and len(y) > 1:
+        r2 = float(np.corrcoef(x, y)[0, 1] ** 2)
+    else:
+        r2 = 0
+    return r2 * 10
+
+
 def compute_return_slope(prices: pd.Series) -> float:
     """计算收益斜率（百分比），回看窗口由 RETURN_SLOPE_LOOKBACK 配置。"""
     if len(prices) < RETURN_SLOPE_LOOKBACK + 1:
@@ -239,6 +252,7 @@ def compute_persistence(
 
         mom_score = compute_momentum_sub_score(prices)
         ret_slope = compute_return_slope(prices)
+        stability = compute_momentum_stability(prices)
 
         if not volumes.empty and len(volumes) >= MOMENTUM_LOOKBACK + 1:
             turnover = compute_turnover_ratio(volumes)
@@ -250,6 +264,7 @@ def compute_persistence(
             "momentum_score": mom_score,
             "return_slope": ret_slope,
             "turnover": turnover,
+            "stability_score": stability,
         }
 
     if not raw_data:
@@ -272,7 +287,7 @@ def compute_persistence(
     ], index=codes_list)
     rel_scores = _minmax_normalize(rel_strengths, 0, 10)
 
-    # 加权合成
+    # 加权合成（含稳定性因子）
     w = PERSISTENCE_WEIGHTS
     for ts_code in codes_list:
         persistence = (
@@ -280,6 +295,7 @@ def compute_persistence(
             + slope_scores[ts_code] * w["return_slope"]
             + turnover_scores[ts_code] * w["turnover_score"]
             + rel_scores[ts_code] * w["relative_strength"]
+            + raw_data[ts_code]["stability_score"] * w["stability_score"]
         )
 
         if persistence >= HIGH_PERSISTENCE:
@@ -298,6 +314,7 @@ def compute_persistence(
             "return_slope": round(slope_scores[ts_code], 2),
             "turnover_score": round(turnover_scores[ts_code], 2),
             "relative_strength": round(rel_scores[ts_code], 2),
+            "stability_score": round(raw_data[ts_code]["stability_score"], 2),
             "return_20d_pct": round(raw_data[ts_code]["return_slope"], 2),
             "rsi": None,  # 可选：后续填充
         })

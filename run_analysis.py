@@ -81,6 +81,7 @@ from analysis.margin_warning import fetch_today_margin, detect_margin_divergence
 from analysis.virtual_portfolio import update_portfolio, get_portfolio_summary
 from analysis.anomaly_detector import detect_anomalies
 from analysis.module_stock_derived_industry import analyze_stock_derived_industry
+from analysis.stock_picks import generate_picks_text, generate_picks_html
 from report.report_generator import generate_report
 from report.html_report_generator import generate_html_report
 from notify.telegram_sender import send_report
@@ -492,6 +493,14 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     except Exception:
         pass
 
+    # ---- 数据新鲜度自检 ----
+    data_freshness = _check_data_freshness(data_summary, logger)
+    data_summary["freshness"] = data_freshness
+    if data_freshness.get("stale_sources"):
+        logger.warning("⚠️ 数据新鲜度警告: %s", ", ".join(data_freshness["stale_sources"]))
+    else:
+        logger.info("✅ 数据新鲜度正常")
+
     # ========================================================
     # 7h. 增强数据源（第五阶段）
     # ========================================================
@@ -602,7 +611,18 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     logger.info("=" * 40)
     logger.info("生成报告...")
 
-    # 8a. 文字版报告（Telegram）
+    # 8a. 个股推荐（含止损与概率）
+    stock_picks_text = None
+    stock_picks_html = None
+    try:
+        latest_stock_date = data_summary.get("stock_latest_date", "latest")
+        stock_picks_text = generate_picks_text(date=latest_stock_date, top_n=5)
+        stock_picks_html = generate_picks_html(date=latest_stock_date, top_n=5)
+        logger.info("个股推荐生成完成")
+    except Exception as e:
+        logger.warning("个股推荐生成失败（可选模块，不影响主流程）: %s", e)
+
+    # 8b. 文字版报告（Telegram）
     try:
         report_text = generate_report(
             sentiment_result=sentiment_result,
@@ -611,6 +631,8 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             module_status=module_status,
             data_summary=data_summary,
             stock_derived_industry_result=stock_derived_industry_result,
+            stock_picks_text=stock_picks_text,
+            regime_result=regime_result,
         )
         logger.info("文字报告生成完成 (%d 字符)", len(report_text))
     except Exception as e:
@@ -624,7 +646,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         os.makedirs(reports_dir, exist_ok=True)
         now = datetime.now()
         time_slot = "morning" if morning else "evening"
-        report_date = data_summary.get("latest_date", now.strftime("%Y%m%d"))
+        report_date = now.strftime("%Y%m%d")
         html_filename = f"report_{report_date}_{time_slot}.html"
         html_path = os.path.join(reports_dir, html_filename)
 
@@ -651,6 +673,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             time_slot=time_slot,
             persistence_trend=persistence_trend,
             stock_derived_industry_result=stock_derived_industry_result,
+            stock_picks_html=stock_picks_html,
         )
 
         with open(html_path, "w", encoding="utf-8") as f:
@@ -682,6 +705,14 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
                 logger.info("报告已推送到 GitHub")
             except Exception as e:
                 logger.warning("GitHub 推送失败（不影响报告生成）: %s", e)
+
+        # 同步报告到 Obsidian Vault
+        if not dry_run:
+            try:
+                _sync_report_to_obsidian(html_path, report_date, time_slot)
+                logger.info("报告已同步到 Obsidian Vault")
+            except Exception as e:
+                logger.warning("Obsidian 同步失败（不影响报告生成）: %s", e)
 
     print()
 
@@ -827,6 +858,112 @@ def _git_push_reports(report_date: str) -> None:
 
     except Exception as e:
         logger.warning("Git push 异常: %s", e)
+
+
+def _sync_report_to_obsidian(html_path: str, report_date: str, time_slot: str) -> None:
+    """将生成的 HTML 报告同步到 Obsidian Vault。
+
+    目标目录: ~/Documents/Obsidian Vault/raw/trend-trading-reports/
+    同时更新 latest.html / latest_morning.html / latest_evening.html 副本。
+    """
+    import shutil
+
+    vault_dir = os.path.expanduser("~/Documents/Obsidian Vault/raw/trend-trading-reports")
+    os.makedirs(vault_dir, exist_ok=True)
+
+    src = html_path
+    if not os.path.exists(src):
+        logger.warning("Obsidian 同步: 源文件不存在 %s", src)
+        return
+
+    # 复制带日期的报告
+    dst_dated = os.path.join(vault_dir, os.path.basename(src))
+    shutil.copy2(src, dst_dated)
+
+    # 更新 latest 副本（Obsidian 不跟随 symlink，用文件复制）
+    latest_name = "latest.html" if time_slot == "evening" else f"latest_{time_slot}.html"
+    dst_latest = os.path.join(vault_dir, latest_name)
+    shutil.copy2(src, dst_latest)
+
+    logger.info("✅ Obsidian Vault 同步: %s", dst_dated)
+
+
+def _check_data_freshness(data_summary: dict, logger) -> dict:
+    """检查各数据源的新鲜度，返回标记 dict。
+
+    按**交易日**滞后天数判断（周末/节假日不计入滞后）：
+    - 行情数据 (stock_daily): 滞后 >1 个交易日 → STALE
+    - 行业指数 (sw_index): 滞后 >1 个交易日 → STALE
+    - 资金流 (moneyflow): 滞后 >2 个交易日 → STALE（T+1 是正常的）
+    - 融资融券 (margin): 滞后 >1 个交易日 → STALE
+
+    Returns:
+        {"status": "fresh"|"stale", "stale_sources": [...], "warnings": [...]}
+    """
+    from datetime import datetime, timezone, timedelta
+
+    beijing_now = datetime.now(timezone(timedelta(hours=BEIJING_TZ_OFFSET)))
+    today_str = beijing_now.strftime("%Y%m%d")
+
+    freshness = {
+        "status": "fresh",
+        "stale_sources": [],
+        "warnings": [],
+        "check_time": today_str,
+    }
+
+    # (数据源 key, data_summary key, 最大交易日后滞, 标签)
+    checks = [
+        ("stock_daily", "stock_latest_date", 1, "个股行情"),
+        ("sw_index_daily", "latest_date", 1, "行业指数"),
+        ("moneyflow_cache", "moneyflow_latest_date", 2, "资金流"),
+        ("margin_cache", "margin_latest_date", 1, "融资融券"),
+    ]
+
+    for source, key, max_trading_lag, label in checks:
+        date_str = data_summary.get(key)
+        if date_str in (None, "N/A", ""):
+            freshness["stale_sources"].append(label)
+            freshness["warnings"].append(f"❌ {label}: 无数据")
+            freshness["status"] = "stale"
+            continue
+
+        try:
+            trading_lag = _count_trading_days_between(str(date_str)[:8], today_str)
+            if trading_lag > max_trading_lag:
+                freshness["stale_sources"].append(label)
+                freshness["warnings"].append(
+                    f"⚠️ {label}: 最新 {date_str}，滞后 {trading_lag} 个交易日（阈值 {max_trading_lag}）"
+                )
+                freshness["status"] = "stale"
+        except Exception:
+            pass
+
+    return freshness
+
+
+def _count_trading_days_between(from_date: str, to_date: str) -> int:
+    """计算两个日期之间（不含起始日）的交易日数。
+
+    用简单规则：排除周六、周日。
+    Args:
+        from_date: YYYYMMDD 格式的起始日期
+        to_date: YYYYMMDD 格式的结束日期
+    Returns:
+        交易日天数
+    """
+    from datetime import datetime, timedelta
+
+    start = datetime.strptime(from_date[:8], "%Y%m%d")
+    end = datetime.strptime(to_date[:8], "%Y%m%d")
+
+    count = 0
+    current = start + timedelta(days=1)  # 从次日开始计
+    while current <= end:
+        if current.weekday() < 5:  # 周一至周五
+            count += 1
+        current += timedelta(days=1)
+    return count
 
 
 if __name__ == "__main__":

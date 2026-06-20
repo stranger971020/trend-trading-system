@@ -38,7 +38,9 @@ def generate_report(
     stock_result: dict,
     module_status: dict,
     data_summary: dict,
-    stock_derived_industry_result: dict | None = None,
+    stock_derived_industry_result: dict = None,
+    stock_picks_text: str = None,
+    regime_result: dict = None,
 ) -> str:
     """生成完整的分析报告。
 
@@ -93,9 +95,17 @@ def generate_report(
             lines.append("")
             lines.append("✅ 无顶背离预警信号")
 
-        # 仓位建议
+        # 仓位建议（显示中期+短期两个口径）
+        regime_label = regime_result.get("regime", "N/A") if regime_result else "N/A"
+        regime_pos = regime_result.get("position_advice", "N/A") if regime_result else "N/A"
+        adx_v = regime_result.get("adx", 0) if regime_result else 0
+        sent_pos = sentiment_result.get("position_advice", "N/A")
         lines.append("")
-        lines.append(f"<b>仓位建议:</b> {sentiment_result.get('position_advice', 'N/A')}")
+        lines.append("━" * 10)
+        lines.append("<b>仓位建议（两口径）</b>")
+        lines.append(f"  📈 中期趋势: <b>{regime_pos}</b>  |  {regime_label} · MA200+ADX={adx_v:.1f}")
+        lines.append(f"  📊 短期情绪: <b>{sent_pos}</b>  |  {sent} · 20日动量 {_format_pct(avg_mom)}")
+        lines.append(f"  💡 两口径不一致时，以中期趋势为主，短期情绪为辅")
     elif sentiment_result.get("status") == "degraded":
         lines.append(f"⚠️ 情绪判定: 数据不足，无法完整分析")
         lines.append(f"原因: {sentiment_result.get('error', '未知')}")
@@ -170,6 +180,26 @@ def generate_report(
                 )
         else:
             lines.append("⚠️ 无足够数据推算行业指标")
+
+        # 反转候选
+        rev_df = stock_derived_industry_result.get("reversal_df")
+        if rev_df is not None and not rev_df.empty:
+            lines.append("")
+            lines.append("━" * 10)
+            lines.append("<b>🔁 反转候选 — 弱势行业中捕捉反弹信号</b>")
+            lines.append("20日动量为负，但短期明显走强（反转强度 = 5日 - 20日），可能处于弱转强早期阶段:")
+            lines.append("")
+            lines.append(f"<code>{'行业':<12} {'个股':<6} {'5日动量':<10} {'20日动量':<10} {'反转强度':<10} {'站上MA5':<8}</code>")
+            for _, row in rev_df.iterrows():
+                lines.append(
+                    f"<code>{str(row.get('l2_name','')):<12} "
+                    f"{int(row.get('stock_count',0)):<6} "
+                    f"{float(row.get('avg_return_5d',0)):>+9.1f}% "
+                    f"{float(row.get('avg_return_20d',0)):>+9.1f}% "
+                    f"{float(row.get('reversal_strength',0)):>+8.1f}% "
+                    f"{float(row.get('pct_above_ma5',0)):>6.0f}%</code>"
+                )
+
         lines.append("")
 
     # ==================== 三、个股挖掘 ====================
@@ -215,6 +245,11 @@ def generate_report(
         lines.append(f"❌ 模块3失败: {stock_result.get('error', '未知错误')}")
 
     lines.append("")
+
+    # ==================== 四、个股推荐（含止损与概率） ====================
+    if stock_picks_text:
+        lines.append(stock_picks_text)
+        lines.append("")
 
     # ==================== 运行状态 ====================
     lines.append("━" * 20)

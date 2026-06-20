@@ -404,7 +404,8 @@ def generate_html_report(
     anomaly_result: dict | None = None,
     time_slot: str = "evening",
     persistence_trend: dict | None = None,
-    stock_derived_industry_result: dict | None = None,
+    stock_derived_industry_result: dict = None,
+    stock_picks_html: str = None,
 ) -> str:
     """生成自包含 HTML 报告。
 
@@ -431,19 +432,28 @@ def generate_html_report(
     weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
     latest_date = data_summary.get("latest_date", "N/A")
 
-    # 判断数据新鲜度（2个交易日内算新鲜）
+    # 判断数据新鲜度（使用自检结果）
     freshness_class = "fresh"
+    freshness_info = data_summary.get("freshness", {})
     l3d = data_summary.get("l3_latest_date", "N/A")
     sd = data_summary.get("stock_latest_date", "N/A")
     freshness_text = f"行业: {latest_date} | L3: {l3d} | 个股: {sd}"
-    try:
-        data_dt = datetime.strptime(str(latest_date), "%Y%m%d").date()
-        days_behind = (now.date() - data_dt).days
-        if days_behind > 3:
-            freshness_class = "stale"
-            freshness_text = f"数据延迟 {days_behind}天"
-    except Exception:
-        pass
+    freshness_warnings = freshness_info.get("warnings", [])
+
+    if freshness_info.get("status") == "stale":
+        freshness_class = "stale"
+        stale_list = freshness_info.get("stale_sources", [])
+        freshness_text = f"⚠️ 数据延迟: {', '.join(stale_list)} | {freshness_text}"
+    elif not freshness_info:
+        # 兜底：旧逻辑
+        try:
+            data_dt = datetime.strptime(str(latest_date), "%Y%m%d").date()
+            days_behind = (now.date() - data_dt).days
+            if days_behind > 3:
+                freshness_class = "stale"
+                freshness_text = f"数据延迟 {days_behind}天"
+        except Exception:
+            pass
 
     parts: list[str] = []
 
@@ -481,7 +491,16 @@ function toggleFold(btn, tbodyId) {{
 """)
 
     # ---- Executive Summary ----
-    parts.append(_build_executive_summary(sentiment_result, l3_leading_result))
+    # 🆕 数据新鲜度警告横幅
+    if freshness_warnings:
+        warn_items = "".join(f"<li>{w}</li>" for w in freshness_warnings)
+        parts.append(f"""
+<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px 20px;margin-bottom:16px;">
+  <h4 style="color:#92400e;margin:0 0 8px 0;">⚠️ 数据新鲜度预警</h4>
+  <ul style="margin:0;padding-left:20px;font-size:.85rem;color:#78350f;">{warn_items}</ul>
+</div>""")
+
+    parts.append(_build_executive_summary(sentiment_result, l3_leading_result, regime_result))
 
     # === 一、大盘研判 ===
     l1_date = data_summary.get("latest_date", "N/A")
@@ -516,6 +535,10 @@ function toggleFold(btn, tbodyId) {{
     parts.append(f"""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#dc2626;border-top:2px solid #dc2626;border-bottom:2px solid #dc2626;">四、个股精选 — 从强势{source_label}中优选（已排除银行/非银金融） <span style="font-size:.75rem;font-weight:400;color:#94a3b8;">(个股: {stock_date} | 资金流: {mf_date})</span></div>""")
     parts.append(_build_module3(stock_result))
 
+    # === 个股推荐（含止损与概率） ===
+    if stock_picks_html:
+        parts.append(stock_picks_html)
+
     # === 五、风控汇总 ===
     if regime_result or crowding_result:
         parts.append("""<div style="text-align:center;padding:12px;margin:16px 0 8px;font-size:1.1rem;font-weight:700;color:#f59e0b;border-top:2px solid #f59e0b;border-bottom:2px solid #f59e0b;">五、风控与监控</div>""")
@@ -530,12 +553,15 @@ function toggleFold(btn, tbodyId) {{
     return "\n".join(parts)
 
 
-def _build_executive_summary(sentiment_result: dict, l3_leading_result: dict | None = None) -> str:
+def _build_executive_summary(
+    sentiment_result: dict,
+    l3_leading_result: dict = None,
+    regime_result: dict = None,
+) -> str:
     """构建三列摘要卡片。"""
     sent = sentiment_result.get("sentiment", "N/A")
     avg_mom = sentiment_result.get("avg_momentum", 0)
     warnings = sentiment_result.get("divergence_warnings", [])
-    position = sentiment_result.get("position_advice", "N/A")
     bullish = sentiment_result.get("bullish_count", 0)
     bearish = sentiment_result.get("bearish_count", 0)
     neutral = sentiment_result.get("neutral_count", 0)
@@ -545,15 +571,18 @@ def _build_executive_summary(sentiment_result: dict, l3_leading_result: dict | N
     mom_str = f"{_sign(avg_mom)}{avg_mom:.2f}%"
     mom_color = _color_for_momentum(avg_mom)
 
-    # 仓位指针位置
-    if "7-8" in position or "8" in position:
-        gauge_pct = 85
-    elif "5" in position:
-        gauge_pct = 50
-    elif "2-3" in position or "2" in position:
-        gauge_pct = 20
-    else:
-        gauge_pct = 35
+    # 仓位建议（显示中期+短期两个口径）
+    regime = regime_result.get("regime", "N/A") if regime_result else "N/A"
+    regime_advice = regime_result.get("position_advice", "N/A") if regime_result else "N/A"
+    sent_advice = sentiment_result.get("position_advice", "N/A")
+
+    # 取两个建议的中值作为指针位置
+    def _parse_pct(advice):
+        if "7-8" in advice or "8" in advice: return 85
+        if "5" in advice: return 50
+        if "2-3" in advice or "2" in advice: return 20
+        return 35
+    gauge_pct = (_parse_pct(regime_advice) + _parse_pct(sent_advice)) // 2
 
     # L3 领先信号增强仓位建议
     l3_note = ""
@@ -588,7 +617,15 @@ def _build_executive_summary(sentiment_result: dict, l3_leading_result: dict | N
       <div class="gauge-bar"></div>
       <div class="gauge-marker" style="left: calc({gauge_pct}% - 9px); background: {_color_for_score(gauge_pct/100*10)};"></div>
     </div>
-    <div class="gauge-text">{position}{l3_note}</div>
+    <div class="gauge-text">{regime_advice}{l3_note}</div>
+    <div style="margin-top:4px;font-size:0.78rem;color:#64748b;border-top:1px solid #e2e8f0;padding-top:6px;">
+      📈 中期 <b>{regime_advice}</b>（{regime} · MA200+ADX）
+      <br>
+      📊 短期 <b>{sent_advice}</b>（{sent} · 20日动量）
+    </div>
+    <div style="margin-top:4px;font-size:0.7rem;color:#94a3b8;">
+      两个口径不一致时，中期趋势为主，短期情绪为辅
+    </div>
   </div>
 
   <div class="summary-card" style="border-left-color: {'#ef4444' if warnings else '#22c55e'};">
@@ -837,6 +874,48 @@ def _build_stock_derived_industry(result: dict) -> str:
             f'{_build_fold_button(fold_id, hidden_count)}'
         )
 
+    # ---- 反转候选区 ----
+    reversal_html = ""
+    rev_df = result.get("reversal_df")
+    if rev_df is not None and not rev_df.empty:
+        rev_rows = ""
+        for _, row in rev_df.iterrows():
+            l2_name = str(row.get("l2_name", ""))
+            cnt = int(row.get("stock_count", 0))
+            a5 = float(row.get("avg_return_5d", 0))
+            a20 = float(row.get("avg_return_20d", 0))
+            rs = float(row.get("reversal_strength", 0))
+            pct5 = float(row.get("pct_above_ma5", 0))
+            rev_rows += f'''
+            <tr style="background:#fffbeb;">
+              <td class="rank">🔁</td>
+              <td class="sector-name" style="color:#d97706;font-weight:700;">{l2_name}</td>
+              <td style="text-align:center;">{cnt}</td>
+              <td style="color:#22c55e;font-weight:600;">{a5:+.1f}%</td>
+              <td style="color:#94a3b8;">{a20:+.1f}%</td>
+              <td style="color:#ef4444;font-weight:600;">+{rs:.1f}%</td>
+              <td>{pct5:.0f}%</td>
+            </tr>'''
+
+        reversal_html = f'''
+    <div style="margin-top:16px;padding:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+      <h4 style="color:#d97706;margin-bottom:8px;font-size:.9rem;">🔁 反转候选 — 弱势行业中捕捉反弹信号</h4>
+      <p style="font-size:.8rem;color:#92400e;margin-bottom:8px;">
+        20日动量 <b>为负</b>，但最近 5 日短期动量明显强于 20 日均值（反转强度 > 5%），
+        可能处于 <b>弱转强</b> 的早期阶段。
+      </p>
+      <table class="ranking-table" style="font-size:.82rem;">
+        <thead>
+          <tr>
+            <th></th><th>二级行业</th><th>个股</th>
+            <th>5日动量</th><th>20日动量</th>
+            <th style="color:#d97706;">反转强度</th><th>站上MA5</th>
+          </tr>
+        </thead>
+        <tbody>{rev_rows}</tbody>
+      </table>
+    </div>'''
+
     return f"""
 <div class="section">
   <div class="section-title">📊 个股推算 L2 行业指标（自下而上）</div>
@@ -858,6 +937,7 @@ def _build_stock_derived_industry(result: dict) -> str:
     {fold_html}
   </table>
   </div>
+  {reversal_html}
 </div>
 """
 
@@ -1054,10 +1134,12 @@ def _build_module3(stock_result: dict) -> str:
                 atr_pct = pick.get("atr_pct", 0)
                 stop_html = f'<br><span style="font-size:.7rem;color:#94a3b8;">🛑 {stop_price_val:.2f} (ATR {atr_pct:.1f}%)</span>'
 
-            # 基本面数据
+            # 基本面数据（增强版：含盈利质量、FCF Yield、DSO）
             funda = pick.get("fundamental", {})
             funda_html = ""
+            funda_lines = []
             if funda:
+                # 第一行：传统估值指标
                 parts_f = []
                 if "pe_pct" in funda:
                     parts_f.append(f'PE分位{funda["pe_pct"]}%{" ✅" if funda["pe_pct"]<30 else ""}')
@@ -1066,10 +1148,33 @@ def _build_module3(stock_result: dict) -> str:
                 if "roe" in funda:
                     trend = funda.get("roe_trend", "")
                     parts_f.append(f'ROE {funda["roe"]}%{trend}')
+                if "gross_margin" in funda:
+                    parts_f.append(f'毛利率{funda["gross_margin"]:.0f}%')
                 if "funda_bonus" in funda and funda["funda_bonus"] > 0:
                     parts_f.append(f'+{funda["funda_bonus"]:.1f}')
                 if parts_f:
-                    funda_html = '<br><span style="font-size:.7rem;color:#6366f1;">' + " · ".join(parts_f) + '</span>'
+                    funda_lines.append(
+                        '<span style="font-size:.7rem;color:#6366f1;">' + " · ".join(parts_f) + '</span>'
+                    )
+
+                # 第二行：🆕 现金流质量指标
+                parts_q = []
+                if "cfo_np" in funda:
+                    flag = funda.get("cfo_np_flag", "")
+                    parts_q.append(f'CFO/NP {funda["cfo_np"]:.2f}{flag}')
+                if "fcf_yield" in funda:
+                    flag = funda.get("fcf_flag", "")
+                    parts_q.append(f'FCF Yield {funda["fcf_yield"]*100:.1f}%{flag}')
+                if "dso" in funda:
+                    flag = funda.get("dso_flag", "")
+                    parts_q.append(f'DSO {funda["dso"]:.0f}天{flag}')
+                if parts_q:
+                    funda_lines.append(
+                        '<span style="font-size:.7rem;color:#0d9488;">' + " · ".join(parts_q) + '</span>'
+                    )
+
+                if funda_lines:
+                    funda_html = '<br>' + '<br>'.join(funda_lines)
 
             rows_html += (
                 f'<div class="stock-row">'
@@ -1102,7 +1207,7 @@ def _build_module3(stock_result: dict) -> str:
   <div class="section-title">🎯 个股精选</div>
   <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px;">
     从持续性 Top-{len(by_industry)} 个 L2 行业中精选 {len(stocks)} 只个股（按持续性得分降序排列）
-    <br>评分由 ML LightGBM LambdaRank 模型综合多因子计算（含超额收益、20日动量、5日动量、MA偏离、基本面等）
+    <br>评分 = 技术面(LightGBM) + 基本面(PE/PB分位 · ROE · CFO/NP盈利质量 · FCF Yield · DSO周转 · 毛利率)
     （已排除银行/证券/保险类）
   </p>
   <div class="stock-grid">
