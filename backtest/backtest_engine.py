@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 通用回测引擎 (v2 — 向量化)
 - 预计算每日每行业的得分矩阵

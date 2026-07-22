@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 基本面多因子模块（增强版）
 - PE/PB 分位数（行业内比较）
@@ -13,6 +14,7 @@ import logging
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -427,7 +429,7 @@ def fetch_financial_quality_batch(stock_codes: list[str]) -> dict[str, dict]:
 # DSO 计算工具
 # ============================================================
 
-def _compute_dso(ar_turn) -> float | None:
+def _compute_dso(ar_turn) -> Optional[float]:
     """从应收账款周转率计算 DSO（天数）。
 
     DSO = 365 / ar_turn

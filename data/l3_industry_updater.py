@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 申万三级行业日线数据获取与存储
 - 通过 Tushare index_classify 获取 346 个 L3 代码+父级关系

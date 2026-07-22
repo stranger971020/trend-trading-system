@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 申万一级行业日线数据获取与存储
 - 通过 akshare index_hist_sw() 获取 31 个 SW L1 指数日线 OHLCV
@@ -10,6 +11,8 @@ import os
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
+
+from typing import Optional
 
 import akshare as ak
 import pandas as pd
@@ -86,7 +89,7 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
 
 def get_latest_date_for_code(
     conn: sqlite3.Connection, ts_code: str
-) -> str | None:
+) -> Optional[str]:
     """查询某个行业代码在数据库中的最新交易日。"""
     cur = conn.execute(
         "SELECT MAX(trade_date) FROM sw_index_daily WHERE ts_code = ?",

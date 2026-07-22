@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 HTML 报告生成器
 - 自包含 HTML 文件（零外部依赖）
@@ -877,8 +878,9 @@ def _build_stock_derived_industry(result: dict) -> str:
     # ---- 反转候选区 ----
     reversal_html = ""
     rev_df = result.get("reversal_df")
+    MAX_VISIBLE_REV = 5
     if rev_df is not None and not rev_df.empty:
-        rev_rows = ""
+        all_rows = []
         for _, row in rev_df.iterrows():
             l2_name = str(row.get("l2_name", ""))
             cnt = int(row.get("stock_count", 0))
@@ -886,7 +888,7 @@ def _build_stock_derived_industry(result: dict) -> str:
             a20 = float(row.get("avg_return_20d", 0))
             rs = float(row.get("reversal_strength", 0))
             pct5 = float(row.get("pct_above_ma5", 0))
-            rev_rows += f'''
+            all_rows.append(f'''
             <tr style="background:#fffbeb;">
               <td class="rank">🔁</td>
               <td class="sector-name" style="color:#d97706;font-weight:700;">{l2_name}</td>
@@ -895,11 +897,23 @@ def _build_stock_derived_industry(result: dict) -> str:
               <td style="color:#94a3b8;">{a20:+.1f}%</td>
               <td style="color:#ef4444;font-weight:600;">+{rs:.1f}%</td>
               <td>{pct5:.0f}%</td>
-            </tr>'''
+            </tr>''')
+
+        hidden_count = max(0, len(all_rows) - MAX_VISIBLE_REV)
+        visible_rows = "\n".join(all_rows[:MAX_VISIBLE_REV])
+        hidden_rows = "\n".join(all_rows[MAX_VISIBLE_REV:]) if hidden_count > 0 else ""
+        fold_id = _fold_id() if hidden_count > 0 else ""
+
+        rev_body = _render_table_with_fold(
+            visible_rows + "\n</tbody>",
+            hidden_rows,
+            hidden_count,
+            fold_id,
+        )
 
         reversal_html = f'''
     <div style="margin-top:16px;padding:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
-      <h4 style="color:#d97706;margin-bottom:8px;font-size:.9rem;">🔁 反转候选 — 弱势行业中捕捉反弹信号</h4>
+      <h4 style="color:#d97706;margin-bottom:8px;font-size:.9rem;">🔁 反转候选 — 弱势行业中捕捉反弹信号（{len(all_rows)}项）</h4>
       <p style="font-size:.8rem;color:#92400e;margin-bottom:8px;">
         20日动量 <b>为负</b>，但最近 5 日短期动量明显强于 20 日均值（反转强度 > 5%），
         可能处于 <b>弱转强</b> 的早期阶段。
@@ -912,7 +926,7 @@ def _build_stock_derived_industry(result: dict) -> str:
             <th style="color:#d97706;">反转强度</th><th>站上MA5</th>
           </tr>
         </thead>
-        <tbody>{rev_rows}</tbody>
+        {rev_body}
       </table>
     </div>'''
 

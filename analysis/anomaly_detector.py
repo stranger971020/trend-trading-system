@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 异常归因检测器
 - 比较今日结果 vs 近20日滚动均值

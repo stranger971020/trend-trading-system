@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 融资背离预警
 - 用 Tushare margin_detail 获取融资余额

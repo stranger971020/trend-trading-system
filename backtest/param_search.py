@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 参数网格搜索
 - 对 L1 行业轮动策略的关键参数进行网格搜索
@@ -11,6 +12,7 @@ import os
 import sys
 import itertools
 from datetime import datetime
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -186,7 +188,7 @@ def grid_search(
     }
 
 
-def load_params(params_path: str) -> dict | None:
+def load_params(params_path: str) -> Optional[dict]:
     """从 params.json 加载最优参数。"""
     if not os.path.exists(params_path):
         return None

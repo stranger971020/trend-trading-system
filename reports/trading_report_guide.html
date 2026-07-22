@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>每日交易参考 — 策略总纲</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.8;padding:20px;max-width:820px;margin:0 auto}
+h1{font-size:1.4rem;color:#1e293b;margin:32px 0 12px;padding-bottom:8px;border-bottom:2px solid #6366f1}
+h2{font-size:1.15rem;color:#334155;margin:28px 0 10px}
+h3{font-size:1rem;color:#475569;margin:20px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0;padding-left:24px}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.88rem}
+th{background:#eef2ff;color:#4f46e5;padding:8px 10px;border:1px solid #e0e7ff;text-align:left;font-weight:600}
+td{padding:7px 10px;border:1px solid #e2e8f0}
+tr:nth-child(even){background:#f8fafc}
+code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:.85rem;color:#dc2626}
+blockquote{border-left:4px solid #6366f1;background:#eef2ff;padding:12px 16px;margin:12px 0;border-radius:0 8px 8px 0;font-size:.9rem}
+.tag{display:inline-block;padding:1px 10px;border-radius:5px;font-size:.78rem;font-weight:600;margin:0 2px}
+.tag-green{background:#dcfce7;color:#166534}
+.tag-red{background:#fef2f2;color:#dc2626}
+.tag-yellow{background:#fefce8;color:#92400e}
+.tag-purple{background:#eef2ff;color:#4f46e5}
+.footer{text-align:center;padding:20px 0 10px;color:#94a3b8;font-size:.78rem}
+.header-card{background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:28px 32px;border-radius:12px;margin-bottom:24px}
+.header-card h1{font-size:1.4rem;border:none;margin:0;padding:0;color:#fff}
+.header-card p{color:#94a3b8;font-size:.85rem;margin-top:6px}
+.warn-box{background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #ef4444;border-radius:8px;padding:14px 18px;margin:16px 0;font-size:.9rem}
+.info-box{background:#f0fdf4;border:1px solid #bbf7d0;border-left:4px solid #22c55e;border-radius:8px;padding:14px 18px;margin:16px 0;font-size:.9rem}
+.step-num{display:inline-block;width:24px;height:24px;background:#6366f1;color:#fff;border-radius:50%;text-align:center;line-height:24px;font-size:.78rem;font-weight:700;margin-right:6px}
+@media(max-width:640px){body{padding:12px}.header-card{padding:20px}}
+</style>
+</head>
+<body>
+
+<div class="header-card">
+<h1>📊 每日交易参考 — 策略总纲</h1>
+<p>完整策略规则 · 搭配每日报告使用</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>一、默认持仓配置</h2>
+<!-- ============================================================ -->
+
+<table>
+<tr><th>资产</th><th>比例</th><th>说明</th></tr>
+<tr><td>科技中小盘股（100~500亿）</td><td>40%</td><td>弹性最大，贡献主要收益</td></tr>
+<tr><td>科创50 ETF</td><td>20%</td><td>风格接近，降低个股集中度</td></tr>
+<tr><td>沪深300 ETF</td><td>25%</td><td>稳定器，相对扛跌</td></tr>
+<tr><td>恒生科技 ETF</td><td>15%</td><td>分散A股单一市场风险</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>二、四级风险与仓位对应</h2>
+<!-- ============================================================ -->
+
+<table>
+<tr><th>报告信号</th><th>触发条件</th><th>总仓位上限</th><th>操作</th></tr>
+<tr>
+  <td><span class="tag tag-green">✅ 正常</span></td>
+  <td>无信号，追涨区正常</td>
+  <td><b>100%</b></td>
+  <td>维持默认配置</td>
+</tr>
+<tr>
+  <td><span class="tag tag-yellow">📊 反弹乏力</span></td>
+  <td>死猫反弹单独触发</td>
+  <td><b>≤40%</b></td>
+  <td>不加仓，维持现有</td>
+</tr>
+<tr>
+  <td><span class="tag tag-yellow" style="background:#fff7ed;color:#c2410c">⚠️ 市场偏弱</span></td>
+  <td>广度崩塌 或 趋势破位+死猫</td>
+  <td><b>≤30%</b></td>
+  <td>执行下方减仓步骤</td>
+</tr>
+<tr>
+  <td><span class="tag tag-red">⛔ 市场脆弱</span></td>
+  <td>广度崩塌+趋势破位</td>
+  <td><b>≤15%</b></td>
+  <td>保留沪深300底仓，其余全清</td>
+</tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>三、warning 减仓步骤</h2>
+<!-- ============================================================ -->
+
+<p>报告出现 <span class="tag tag-yellow" style="background:#fff7ed;color:#c2410c">⚠️ 市场偏弱</span> 时，<b>次日开盘</b>按以下顺序执行：</p>
+
+<table>
+<tr><th>步骤</th><th>操作</th><th>仓位变化</th><th>理由</th></tr>
+<tr><td><span class="step-num">1</span></td><td><b>清掉科创50 ETF</b></td><td>100% → 80%</td><td>弹性最大，跌最快</td></tr>
+<tr><td><span class="step-num">2</span></td><td><b>科技中小盘减半</b></td><td>80% → 60%</td><td>保留一半防假信号</td></tr>
+<tr><td><span class="step-num">3</span></td><td><b>恒生科技减半</b></td><td>60% → 53%</td><td>港股不完全跟随A股</td></tr>
+<tr><td><span class="step-num">4</span></td><td>沪深300不动</td><td>53% → 53%</td><td>大票抗跌，留底仓</td></tr>
+</table>
+
+<p>最终仓位约 <b>53%</b>。若仍高于建议的30%，可再减部分沪深300至目标。</p>
+
+<!-- ============================================================ -->
+<h2>四、danger 加严</h2>
+<!-- ============================================================ -->
+
+<div class="warn-box">
+warning 升级为 <b>⛔ 市场脆弱</b> 时：<br>
+• 科创50、中小盘、恒生科技 全部清掉<br>
+• 沪深300 保留 <b>10~15%</b> 作为底仓
+</div>
+
+<!-- ============================================================ -->
+<h2>五、加仓回补规则</h2>
+<!-- ============================================================ -->
+
+<p><b>首次出现行业 ≥70% 上涨当日，一步回满，不分批：</b></p>
+
+<table>
+<tr><th>步骤</th><th>操作</th><th>仓位变化</th></tr>
+<tr><td><span class="step-num">1</span></td><td>科创50 ETF → 一步回满</td><td>30% → 50%</td></tr>
+<tr><td><span class="step-num">2</span></td><td>科技中小盘 → 一步回满</td><td>50% → 90%</td></tr>
+<tr><td><span class="step-num">3</span></td><td>恒生科技 → 一步回满</td><td>90% → 105%</td></tr>
+<tr><td><span class="step-num">4</span></td><td>沪深300调整至25%</td><td>105% → 100%</td></tr>
+</table>
+
+<div class="info-box">
+📊 回测数据支持：一步回满比分批加仓年化高 <b>+4%</b>，交易次数减少 <b>46%</b>（2020-2026，6.5年回测）。
+</div>
+
+<!-- ============================================================ -->
+<h2>六、提前减仓信号（独立于报告）</h2>
+<!-- ============================================================ -->
+
+<div class="warn-box">
+⚠️ <b>即使报告没有 warning 信号，以下情况也应手动减仓：</b><br><br>
+<big><b>北向资金连续 3 天净流出超过 50 亿元 → 提前将仓位降至 50%</b></big><br><br>
+北向资金是外资"聪明钱"的实时风向标。它连续大额流出往往比 A 股广度指标提前 1~3 天。<br>
+这是一个独立的提前预警，<b>不与报告的 warning 信号绑定</b>。
+</div>
+
+<!-- ============================================================ -->
+<h2>七、持仓分类与角色</h2>
+<!-- ============================================================ -->
+
+<table>
+<tr><th>资产</th><th>在与报告信号的关系</th></tr>
+<tr><td>科技中小盘股（100~500亿）</td><td>高度相关 — 广度信号恶化时最先跌，反弹最快</td></tr>
+<tr><td>科创50 ETF</td><td>高度相关 — 和中小盘高度联动</td></tr>
+<tr><td>恒生科技 ETF</td><td>中度相关 — 受港股自身因素影响，有时A股跌它不跌</td></tr>
+<tr><td>沪深300 ETF</td><td>高度相关但抗跌 — 大票有护盘，下跌滞后且幅度小</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>八、完整决策流程</h2>
+<!-- ============================================================ -->
+
+<blockquote>
+<pre style="font-family:inherit;white-space:pre-wrap;margin:0">
+每日看报告 →
+  ├─ warning? → 次日按步骤减仓到 ≤30%
+  ├─ danger? → 清仓，留沪深300 10%
+  ├─ 行业≥70%上涨？ → 一步回满
+  └─ 无信号 + 北向连续3天流出>50亿？ → 提前减到 50%
+</pre>
+</blockquote>
+
+<!-- ============================================================ -->
+<h2>九、版本历史</h2>
+<!-- ============================================================ -->
+
+<table>
+<tr><th>日期</th><th>变更</th></tr>
+<tr><td>2026-07-21</td><td>初始版：L2技术指标驱动的板块四分区+个股精选</td></tr>
+<tr><td>2026-07-22</td><td>修复 risk_title 未定义导致HTML生成失败</td></tr>
+<tr><td>2026-07-22</td><td>关键点位改用Tushare真实数据，去除模拟数据</td></tr>
+<tr><td>2026-07-22</td><td>新增市场脆弱度三段式信号（广度崩塌/趋势破坏/死猫反弹）</td></tr>
+<tr><td>2026-07-22</td><td>仓位计算改为脆弱度优先，移除顶背离/高位区阈值</td></tr>
+<tr><td>2026-07-22</td><td>新增完整策略规则（持仓配置/减仓步骤/回补/北向预警）</td></tr>
+</table>
+
+<div class="footer">
+⚠️ 本文档由 Claude 根据代码逻辑与回测数据生成 · 不构成投资建议<br>
+数据来源: Tushare Pro · akshare<br>
+<a href="https://stranger971020.github.io/trend-trading-system/reports/latest.html">最新完整报告</a> ·
+<a href="https://github.com/stranger971020/trend-trading-system">GitHub 仓库</a>
+</div>
+
+</body>
+</html>

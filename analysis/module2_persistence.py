@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 模块2: 板块持续性评分
 - 对每个 SW L1 行业计算 0-10 持续性得分

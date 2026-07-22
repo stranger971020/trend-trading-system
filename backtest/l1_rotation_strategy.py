@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 L1 行业轮动策略
 - 复用模块2的持续性评分逻辑

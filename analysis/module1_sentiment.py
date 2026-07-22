@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 模块1: 市场情绪与择时
 - 计算 31 个 SW L1 行业的平均动量

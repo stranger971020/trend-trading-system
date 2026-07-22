@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 模块3: 个股精选
 - 从高持续性（>=7）和中等持续性（>=5）的 SW L1 行业中选股

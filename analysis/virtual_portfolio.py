@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 虚拟持仓跟踪
 - 维护模拟持仓表，每日记录理论持仓变化

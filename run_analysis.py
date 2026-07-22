@@ -56,18 +56,18 @@ from data.stock_daily_updater import (
     fetch_all_stocks,
     load_stock_daily,
 )
-from data.l3_industry_updater import (
-    load_l3_mapping,
-    fetch_and_store_l3,
-    load_l3_daily,
-)
+# from data.l3_industry_updater import (
+#     load_l3_mapping,
+#     fetch_and_store_l3,
+#     load_l3_daily,
+# )
 from analysis.module1_sentiment import analyze_sentiment
 from analysis.module2_persistence import (
     analyze_persistence,
-    analyze_l3_persistence,
+    # analyze_l3_persistence,
 )
-from analysis.module3_stock_mining import analyze_stocks, analyze_stocks_l3, analyze_stocks_l2
-from analysis.module0_l3_leading import analyze_l3_leading
+from analysis.module3_stock_mining import analyze_stocks, analyze_stocks_l2  # analyze_stocks_l3 removed (unused)
+# from analysis.module0_l3_leading import analyze_l3_leading
 from analysis.module0_l2_leading import analyze_l2_leading
 from data.l2_industry_updater import load_l2_mapping, fetch_and_store_l2, load_l2_daily
 from analysis.market_regime import determine_regime
@@ -143,7 +143,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     }
     data_summary = {
         "latest_date": "N/A",
-        "l3_latest_date": "N/A",
+        # "l3_latest_date": "N/A",  # L3 已停用
         "stock_latest_date": "N/A",
         "moneyflow_latest_date": "N/A",
         "margin_latest_date": "N/A",
@@ -269,49 +269,51 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         module_status["module2"] = "failed"
 
     # ========================================================
-    # 6b. L3 三级行业数据
+    # 6b. L3 三级行业数据（已停用 — 仅用于 HTML 报告，不影&#21709;核心分析）
     # ========================================================
-    logger.info("=" * 40)
-    logger.info("加载三级行业数据...")
+    # logger.info("=" * 40)
+    # logger.info("加载三级行业数据...")
     l3_daily_df = None
     l3_leading_result = None
     l3_persistence_result = None
-    l3_stock_result = None
-
-    try:
-        l3_mapping = load_l3_mapping()
-        logger.info("L3 行业映射: %d 个代码", len(l3_mapping))
-
-        l3_summary = fetch_and_store_l3(DB_PATH, l3_mapping)
-        data_summary["l3_total"] = l3_summary["total"]
-        data_summary["l3_active"] = l3_summary["active"]
-        data_summary["l3_new_rows"] = l3_summary["new_rows"]
-        logger.info(
-            "L3 数据: %d 代码, %d 活跃, +%d 条",
-            l3_summary["total"], l3_summary["active"], l3_summary["new_rows"],
-        )
-
-        l3_daily_df = load_l3_daily(DB_PATH)
-        logger.info("加载 %d 条 L3 日线数据", len(l3_daily_df))
-        if not l3_daily_df.empty:
-            data_summary["l3_latest_date"] = str(l3_daily_df["trade_date"].max())
-
-        # ---- 模块0: 三级领先信号 ----
-        logger.info("执行模块0: 三级行业领先信号...")
-        l3_leading_result = analyze_l3_leading(l3_daily_df, daily_df)
-        module_status["module0"] = l3_leading_result.get("status", "failed")
-        logger.info("模块0: %s", module_status["module0"])
-
-        # ---- 模块2 L3: 三级持续性 ----
-        logger.info("执行模块2 L3: 三级行业持续性评分...")
-        l3_persistence_result = analyze_l3_persistence(l3_daily_df)
-        module_status["module2_l3"] = l3_persistence_result.get("status", "failed")
-        logger.info("模块2 L3: %s", module_status["module2_l3"])
-
-    except Exception as e:
-        logger.error("L3 管线失败: %s", e, exc_info=True)
-        module_status["module0"] = "failed"
-        module_status["module2_l3"] = "failed"
+    # l3_stock_result = None
+    # data_summary["l3_latest_date"] = "N/A"
+    #
+    # try:
+    #     l3_mapping = load_l3_mapping()
+    #     logger.info("L3 行业映射: %d 个代码", len(l3_mapping))
+    #
+    #     l3_summary = fetch_and_store_l3(DB_PATH, l3_mapping)
+    #     data_summary["l3_total"] = l3_summary["total"]
+    #     data_summary["l3_active"] = l3_summary["active"]
+    #     data_summary["l3_new_rows"] = l3_summary["new_rows"]
+    #     logger.info(
+    #         "L3 数据: %d 代码, %d 活跃, +%d 条",
+    #         l3_summary["total"], l3_summary["active"], l3_summary["new_rows"],
+    #     )
+    #
+    #     l3_daily_df = load_l3_daily(DB_PATH)
+    #     logger.info("加载 %d 条 L3 日线数据", len(l3_daily_df))
+    #     if not l3_daily_df.empty:
+    #         data_summary["l3_latest_date"] = str(l3_daily_df["trade_date"].max())
+    #
+    #     # ---- 模块0: 三级领先信号 ----
+    #     logger.info("执行模块0: 三级行业领先信号...")
+    #     l3_leading_result = analyze_l3_leading(l3_daily_df, daily_df)
+    #     module_status["module0"] = l3_leading_result.get("status", "failed")
+    #     logger.info("模块0: %s", module_status["module0"])
+    #
+    #     # ---- 模块2 L3: 三级持续性 ----
+    #     logger.info("执行模块2 L3: 三级行业持续性评分...")
+    #     l3_persistence_result = analyze_l3_persistence(l3_daily_df)
+    #     module_status["module2_l3"] = l3_persistence_result.get("status", "failed")
+    #     logger.info("模块2 L3: %s", module_status["module2_l3"])
+    #
+    # except Exception as e:
+    #     logger.error("L3 管线失败: %s", e, exc_info=True)
+    #     module_status["module0"] = "failed"
+    #     module_status["module2_l3"] = "failed"
+    # ---- 跳过 L3（已停用），直接进入 L2 ----
 
     # ---- L2 二级行业（投资方向主引擎） ----
     l2_daily_df = None
@@ -606,6 +608,34 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         module_status["anomaly"] = "failed"
 
     # ========================================================
+    # 7i. 关键点位计算（大盘指数支撑/阻力位）—— R5 整合
+    # ========================================================
+    key_levels_result = None
+    try:
+        logger.info("=" * 40)
+        logger.info("执行关键点位计算（大盘指数支撑/阻力位）...")
+        from analysis.key_levels_calculator import run as run_key_levels
+        kl_result = run_key_levels(index_name="上证指数", output_dir=None)
+        if kl_result and kl_result.get("success"):
+            key_levels_result = kl_result
+            lvls = kl_result["levels"]
+            st = kl_result["status"]
+            logger.info(
+                "✅ 关键点位: 当前 %.2f | 支撑 %.2f~%.2f | 阻力 %.2f~%.2f | 状态: %s",
+                lvls["close_price"],
+                lvls["ultra_support"], lvls["strong_support"],
+                lvls["resistance_mid"], lvls["resistance_high"],
+                st["status"],
+            )
+            module_status["key_levels"] = "success"
+        else:
+            logger.warning("⚠️ 关键点位计算未返回有效结果")
+            module_status["key_levels"] = "skipped"
+    except Exception as e:
+        logger.error("关键点位计算失败: %s", e, exc_info=True)
+        module_status["key_levels"] = "failed"
+
+    # ========================================================
     # 8. 生成报告
     # ========================================================
     logger.info("=" * 40)
@@ -633,11 +663,45 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             stock_derived_industry_result=stock_derived_industry_result,
             stock_picks_text=stock_picks_text,
             regime_result=regime_result,
+            key_levels_result=key_levels_result,
         )
         logger.info("文字报告生成完成 (%d 字符)", len(report_text))
     except Exception as e:
         logger.critical("文字报告生成失败: %s", e, exc_info=True)
         report_text = f"<b>A股趋势交易系统 - 报告生成失败</b>\n\n错误: {e}"
+
+    # 8b-2. L2 技术指标 + 交易参考报告（新版）
+    trading_report_text = None
+    try:
+        from analysis.l2_technical_signals import compute_l2_technical_signals
+        from report.trading_plan_report import generate_daily_trading_report
+        l2_tech_result = compute_l2_technical_signals(DB_PATH)
+
+        # 市场脆弱度评估（三段式信号）
+        risk_assessment = None
+        try:
+            from analysis.risk_assessment import compute_from_db
+            risk_assessment = compute_from_db(DB_PATH)
+            if risk_assessment and risk_assessment.get("alert_level") != "normal":
+                logger.info(
+                    "⚠️ 市场脆弱度: %s (P1=%s P2=%s P3=%s)",
+                    risk_assessment["alert_level"],
+                    risk_assessment.get("p1_active", False),
+                    risk_assessment.get("p2_active", False),
+                    risk_assessment.get("p3_active", False),
+                )
+        except Exception as e:
+            logger.debug("脆弱度评估跳过: %s", e)
+
+        trading_report_text = generate_daily_trading_report(
+            l2_tech_result=l2_tech_result,
+            regime_result=regime_result,
+            key_levels_result=key_levels_result,
+            risk_assessment=risk_assessment,
+        )
+        logger.info("交易参考报告生成完成 (%d 字符)", len(trading_report_text))
+    except Exception as e:
+        logger.warning("交易参考报告生成失败: %s", e, exc_info=True)
 
     # 8b. HTML 报告
     html_path = None
@@ -662,8 +726,8 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             stock_result=stock_result,
             module_status=module_status,
             data_summary=data_summary,
-            l3_leading_result=l3_leading_result,
-            l3_persistence_result=l3_persistence_result,
+            l3_leading_result=l3_leading_result,  # None (L3 已停用)
+            l3_persistence_result=l3_persistence_result,  # None (L3 已停用)
             l2_leading_result=l2_leading_result,
             l2_persistence_result=l2_persistence_result,
             regime_result=regime_result,
@@ -688,6 +752,26 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             f.write(html_content)
 
         logger.info("HTML 报告已保存: %s (%d 字节)", html_path, len(html_content))
+
+        # ---- 新版交易参考报告（HTML 版） — 保存到 reports/trading_*.html ----
+        trading_html_path = None
+        if trading_report_text:
+            try:
+                trading_html_filename = f"trading_{report_date}_{time_slot}.html"
+                trading_html_path = os.path.join(reports_dir, trading_html_filename)
+
+                from report.trading_plan_report import generate_daily_trading_html
+                trading_html_content = generate_daily_trading_html(
+                    l2_tech_result=l2_tech_result,
+                    regime_result=regime_result,
+                    risk_assessment=risk_assessment,
+                )
+
+                with open(trading_html_path, "w", encoding="utf-8") as f:
+                    f.write(trading_html_content)
+                logger.info("交易参考 HTML 已保存: %s (%d 字节)", trading_html_path, len(trading_html_content))
+            except Exception as e:
+                logger.warning("交易参考 HTML 保存失败: %s", e)
     except Exception as e:
         logger.error("HTML 报告生成失败: %s", e, exc_info=True)
 
@@ -714,6 +798,14 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             except Exception as e:
                 logger.warning("Obsidian 同步失败（不影响报告生成）: %s", e)
 
+            # 同步交易参考报告到 Obsidian
+            if trading_html_path:
+                try:
+                    _sync_report_to_obsidian(trading_html_path, report_date, time_slot)
+                    logger.info("交易参考已同步到 Obsidian Vault")
+                except Exception as e:
+                    logger.warning("交易参考 Obsidian 同步失败: %s", e)
+
     print()
 
     # ========================================================
@@ -727,16 +819,22 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         github_url = f"https://stranger971020.github.io/trend-trading-system/reports/{report_filename}"
         report_text_with_link = report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
 
+        # 新版交易参考报告（唯一推送）
         try:
-            push_result = send_report(report_text_with_link)
-            logger.info(
-                "推送结果: %d/%d 发送成功, %d 失败",
-                push_result["sent"],
-                push_result["total"],
-                push_result["failed"],
-            )
-        except Exception as e:
-            logger.error("推送异常: %s", e, exc_info=True)
+            if trading_report_text:
+                # 生成 GitHub 链接指向新版交易参考 HTML
+                trading_filename = f"trading_{report_date}_{time_slot}.html"
+                github_url = f"https://stranger971020.github.io/trend-trading-system/reports/{trading_filename}"
+                push_text = trading_report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
+                push_result = send_report(push_text)
+                logger.info(
+                    "交易参考报告推送: %d/%d 成功, %d 失败",
+                    push_result["sent"],
+                    push_result["total"],
+                    push_result["failed"],
+                )
+        except Exception as e2:
+            logger.warning("交易参考推送失败: %s", e2)
     else:
         logger.info("--dry-run: 跳过 Telegram 推送")
 
@@ -850,10 +948,13 @@ def _git_push_reports(report_date: str) -> None:
         )
 
         # push
-        subprocess.run(
+        push_result = subprocess.run(
             ["git", "push", "origin", "main"],
-            cwd=project_root, capture_output=True, timeout=30,
+            cwd=project_root, capture_output=True, timeout=60,
         )
+        if push_result.returncode != 0:
+            stderr = push_result.stderr.decode("utf-8", errors="replace")[:200]
+            raise RuntimeError(f"git push 失败 (code={push_result.returncode}): {stderr}")
         logger.info("✅ GitHub 推送成功")
 
     except Exception as e:

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 个股日线数据获取与存储
 - 通过 Tushare pro.daily() 获取个股日线 OHLCV

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 ML 评分模型 — LightGBM LambdaRank
 - 从历史数据构建特征矩阵

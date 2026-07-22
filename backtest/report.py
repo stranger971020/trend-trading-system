@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 回测 HTML 报告生成器
 - 纯 CSS 净值曲线图

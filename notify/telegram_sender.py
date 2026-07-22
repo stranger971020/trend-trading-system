@@ -138,14 +138,16 @@ def send_report(report_text: str) -> dict:
             failed += 1
             logger.warning("  [%d/%d] ✗ 发送失败", i, total)
 
-            # 尝试用纯文本模式重试一次
-            if failed > 0:
-                logger.info("  尝试纯文本模式重试...")
-                time.sleep(1)
-                success2 = send_single_message(chunk, parse_mode="")
+            # 重试（最多 3 次，指数退避，保持 HTML 模式）
+            for retry in range(2):
+                delay = 5 * (retry + 1)
+                logger.info("  重试 %d/2（等待 %d 秒）...", retry + 1, delay)
+                time.sleep(delay)
+                success2 = send_single_message(chunk, parse_mode="HTML")
                 if success2:
                     sent += 1
                     failed -= 1
+                    break
 
         # 段间延迟
         if i < total:

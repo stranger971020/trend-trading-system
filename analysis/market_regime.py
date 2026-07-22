@@ -141,6 +141,37 @@ def determine_regime(
             "details": detail,
         })
 
+        # -- 扩展: 7状态细粒度检测 + 策略参数 --
+        returns_20d = market.pct_change(20).iloc[-1] * 100 if len(market) >= 21 else 0
+        returns_60d = market.pct_change(60).iloc[-1] * 100 if len(market) >= 61 else 0
+        ma20_val = market.rolling(20, min_periods=20).mean().iloc[-1] if len(market) >= 20 else price
+        above_ma20 = price > ma20_val
+
+        if regime == "BEAR" and returns_20d < -5: regime_v2 = "bear"
+        elif regime == "BULL" and returns_20d > 5 and returns_60d > 10: regime_v2 = "bull"
+        elif regime == "BULL" and returns_20d > 3: regime_v2 = "early_bull"
+        elif above_ma20 and returns_20d > 2: regime_v2 = "rebound"
+        elif above_ma20: regime_v2 = "range_up"
+        elif price > ma200: regime_v2 = "pullback"
+        else: regime_v2 = "range_down"
+
+        REGIME_PARAMS = {
+            'bull':{'label':'🚀 强势牛市','n':'5只','hold':'20天','sl':'-10%','tp':'+20%','desc':'积极追涨'},
+            'early_bull':{'label':'📈 早期牛市','n':'5只','hold':'15天','sl':'-8%','tp':'+15%','desc':'积极布局'},
+            'rebound':{'label':'↗️ 反弹行情','n':'3只','hold':'10天','sl':'-5%','tp':'+10%','desc':'短线交易'},
+            'range_up':{'label':'➡️ 上涨震荡','n':'3只','hold':'15天','sl':'-7%','tp':'+12%','desc':'精选个股'},
+            'pullback':{'label':'⬇️ 回调','n':'0只','hold':'0天','sl':'--','tp':'--','desc':'⚠️ 建议空仓'},
+            'range_down':{'label':'🔻 下跌震荡','n':'0只','hold':'0天','sl':'--','tp':'--','desc':'⚠️ 建议空仓'},
+            'bear':{'label':'🐻 熊市','n':'0只','hold':'0天','sl':'--','tp':'--','desc':'⛔ 建议空仓'},
+        }
+        p = REGIME_PARAMS.get(regime_v2, REGIME_PARAMS['range_up'])
+        result.update({
+            "regime_v2": regime_v2, "regime_v2_label": p['label'], "regime_v2_desc": p['desc'],
+            "strategy_params": p, "ma20_short": round(float(ma20_val), 0),
+            "above_ma20": bool(above_ma20), "returns_20d": round(float(returns_20d), 2),
+            "returns_60d": round(float(returns_60d), 2),
+        })
+
         logger.info("Regime: %s | ADX=%.1f MA50=%.0f MA200=%.0f Price=%.0f",
                      regime, adx, ma50, ma200, price)
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 交易日判断与调度
 - 通过 Tushare trade_cal API 判断某日是否为 A 股交易日
