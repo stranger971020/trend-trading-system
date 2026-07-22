@@ -37,6 +37,7 @@ from config import (
     LOG_FORMAT,
     LOG_DATE_FORMAT,
     LOGS_DIR,
+    DATA_DIR,
     BEIJING_TZ_OFFSET,
     COL_TS_CODE,
 )
@@ -693,11 +694,23 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         except Exception as e:
             logger.debug("脆弱度评估跳过: %s", e)
 
+        # 市场情绪仪表盘
+        sentiment_result = None
+        try:
+            from analysis.market_sentiment import run as run_sentiment
+            cache_path = os.path.join(DATA_DIR, "sentiment_history.json")
+            sentiment_result = run_sentiment(history_cache=cache_path)
+            if sentiment_result and sentiment_result.get("alert"):
+                logger.info("📊 %s", sentiment_result["alert"])
+        except Exception as e:
+            logger.debug("情绪评估跳过: %s", e)
+
         trading_report_text = generate_daily_trading_report(
             l2_tech_result=l2_tech_result,
             regime_result=regime_result,
             key_levels_result=key_levels_result,
             risk_assessment=risk_assessment,
+            sentiment_result=sentiment_result,
         )
         logger.info("交易参考报告生成完成 (%d 字符)", len(trading_report_text))
     except Exception as e:
@@ -765,6 +778,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
                     l2_tech_result=l2_tech_result,
                     regime_result=regime_result,
                     risk_assessment=risk_assessment,
+                    sentiment_result=sentiment_result,
                 )
 
                 with open(trading_html_path, "w", encoding="utf-8") as f:

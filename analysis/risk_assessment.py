@@ -14,7 +14,7 @@
   - alert_label: 中文标签
   - signals: 各信号详情
 """
-import sqlite3
+import logging, sqlite3
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -22,12 +22,18 @@ from typing import Optional, Dict, Any, List
 
 from config import DB_PATH
 
+logger = logging.getLogger(__name__)
+
+
 # ── 参数（基于回测优化的默认值） ──
 P1_DOWN_THRESHOLD = 70      # 行业下跌比例阈值 (%)
 P1_DAYS_REQUIRED = 3        # 5天中需要多少天
 P1_STRICT_DOWN = 75         # 严格模式的行业下跌阈值
 P1_STRICT_DAYS = 4          # 严格模式的天数要求
 P3_DOWN_THRESHOLD = 60      # 死猫反弹的行业下跌阈值
+MICRO_P1_THRESHOLD = 70     # 微盘股下跌阈值 (%)
+MICRO_P1_DAYS = 3           # 5天中需要多少天
+MICRO_LOOKBACK = 5          # 回溯天数
 LOOKBACK = 5                # 回溯天数
 
 
@@ -39,6 +45,7 @@ def assess_fragility(
     l2_down_pct_history: List[float] = None,
     index_ma20: float = None,
     index_vol_ma20: float = None,
+    micro_down_pct_history: List[float] = None,
 ) -> Dict[str, Any]:
     """
     评估市场脆弱度
@@ -89,22 +96,41 @@ def assess_fragility(
     else:
         signals['p3_active'] = False
 
+    # 微盘股 P1：近MICRO_LOOKBACK天中≥MICRO_P1_DAYS天超过MICRO_P1_THRESHOLD%下跌
+    signals['micro_p1_active'] = False
+    if micro_down_pct_history and len(micro_down_pct_history) >= MICRO_LOOKBACK:
+        recent_micro = micro_down_pct_history[-MICRO_LOOKBACK:]
+        micro_heavy = sum(1 for v in recent_micro if v > MICRO_P1_THRESHOLD)
+        signals['micro_p1_active'] = micro_heavy >= MICRO_P1_DAYS
+        signals['micro_p1_heavy_days'] = micro_heavy
+
     # ── 综合判定 ──
-    if signals.get('p1_strict') or (signals.get('p1_active') and signals.get('p2_below_ma20')):
+    # 升级规则: 全市场P1严格+微盘P1同时触发 → danger
+    if signals.get('p1_strict') and signals.get('micro_p1_active'):
+        alert_level = 'danger'
+        alert_label = '⛔ 市场脆弱：高度谨慎'
+        pos_cap = 15
+        pos_desc = '全行业+微盘股同步崩塌，极端风险'
+    elif signals.get('p1_strict') or (signals.get('p1_active') and signals.get('p2_below_ma20')):
         alert_level = 'danger'
         alert_label = '⛔ 市场脆弱：高度谨慎'
         pos_cap = 15
         pos_desc = '广度崩塌+趋势破位，极端风险'
+    elif signals.get('p1_active') and signals.get('micro_p1_active'):
+        alert_level = 'danger'
+        alert_label = '⛔ 市场脆弱：全行业+微盘同步崩塌'
+        pos_cap = 15
+        pos_desc = '全行业与微盘股同步恶化，极端风险'
     elif signals.get('p1_active') or (signals.get('p2_below_ma20') and signals.get('p3_active')):
         alert_level = 'warning'
         alert_label = '⚠️ 市场偏弱：轻仓防御'
         pos_cap = 30
         pos_desc = '广度恶化或趋势走弱，轻仓防御'
-    elif signals.get('p3_active'):
+    elif signals.get('p3_active') or signals.get('micro_p1_active'):
         alert_level = 'caution'
-        alert_label = '📊 反弹乏力：注意风险'
+        alert_label = '📊 微盘预警：先行信号'
         pos_cap = 40
-        pos_desc = '指数上涨但个股分化，不宜追高'
+        pos_desc = '微盘股大面积下跌，全市场风险上升中'
     else:
         alert_level = 'normal'
         alert_label = None  # 沿用正常仓位计算
@@ -125,10 +151,46 @@ def assess_fragility(
         'p1_active': signals.get('p1_active', False),
         'p2_active': signals.get('p2_below_ma20', False),
         'p3_active': signals.get('p3_active', False),
+        'micro_p1_active': signals.get('micro_p1_active', False),
         'down_pct': today_down_pct,
         're_entry_signal': re_entry,
     }
 
+
+
+def _fetch_micro_cap_breadth(db_path: str, cutoff: str) -> list:
+    """从stock_daily计算微盘股(<30亿)每日下跌比例"""
+    import tushare as ts
+    from config import TUSHARE_TOKEN
+    pro = ts.pro_api(TUSHARE_TOKEN)
+
+    # 1. 获取微盘股列表
+    df_basic = pro.daily_basic(trade_date=datetime.now().strftime("%Y%m%d"))
+    df_basic['total_mv'] = pd.to_numeric(df_basic['total_mv'], errors='coerce')
+    micro_codes = df_basic[df_basic['total_mv'] < 30e4]['ts_code'].tolist()
+    if not micro_codes:
+        return None
+
+    # 2. 从stock_daily获取这些股票的数据
+    conn = sqlite3.connect(db_path)
+    placeholders = ','.join(['?'] * min(200, len(micro_codes)))
+    df = pd.read_sql_query(
+        f"SELECT trade_date, ts_code, pct_chg FROM stock_daily "
+        f"WHERE ts_code IN ({placeholders}) AND trade_date >= ? ORDER BY trade_date",
+        conn, params=micro_codes[:200] + [cutoff[:8]]
+    )
+    conn.close()
+
+    if df.empty:
+        return None
+
+    df['pct_chg'] = pd.to_numeric(df['pct_chg'], errors='coerce')
+    daily = df.groupby('trade_date').agg(
+        down_pct=('pct_chg', lambda x: (x < 0).sum() / len(x) * 100),
+    ).reset_index().sort_values('trade_date')
+
+    logger.info("微盘股广度: %d个交易日, 最新%.1f%%下跌", len(daily), daily['down_pct'].iloc[-1] if not daily.empty else 0)
+    return daily['down_pct'].tolist()
 
 def compute_from_db(db_path: str = DB_PATH) -> Dict[str, Any]:
     """
@@ -182,6 +244,13 @@ def compute_from_db(db_path: str = DB_PATH) -> Dict[str, Any]:
 
     l2_down_pct_history = daily_down['down_pct'].tolist()
 
+    # 3. 微盘股广度（近15天）
+    micro_down_pct_history = None
+    try:
+        micro_down_pct_history = _fetch_micro_cap_breadth(db_path, cutoff)
+    except Exception as e:
+        logger.debug("微盘股广度跳过: %s", e)
+
     return assess_fragility(
         index_close=index_close,
         index_pct_chg=index_pct_chg,
@@ -189,4 +258,5 @@ def compute_from_db(db_path: str = DB_PATH) -> Dict[str, Any]:
         l2_down_pct_history=l2_down_pct_history,
         index_ma20=index_ma20,
         index_vol_ma20=index_vol_ma20,
+        micro_down_pct_history=micro_down_pct_history,
     )

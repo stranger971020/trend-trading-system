@@ -195,6 +195,29 @@ def generate_daily_trading_report(
     lines.append(bq)
     lines.append("")
 
+    # 市场情绪仪表盘 + 策略建议
+    if sentiment_result and sentiment_result.get("indicators"):
+        inds = sentiment_result["indicators"]
+        parts = []
+        tips = []
+        for key in ('leverage', 'turnover'):
+            ind = inds.get(key)
+            if ind and "N/A" not in str(ind.get('value', '')):
+                pct = ind.get('pct', 50)
+                parts.append(f"{ind['label']} {ind['value']} ({pct}%分位 {ind.get('signal', '')})")
+                if key == 'leverage' and pct is not None:
+                    if pct < 5:
+                        tips.append("  融资出清极端低位 → 关注反弹机会，非进一步减仓")
+                    elif pct < 20:
+                        tips.append("  融资萎缩 → 配合warning确认但不足以上升到danger")
+                    elif pct > 80:
+                        tips.append("  杠杆偏高 → warning假信号概率高，可少减仓位")
+        if parts:
+            lines.append("📊 市场情绪 · " + " | ".join(parts))
+            for t in tips:
+                lines.append(t)
+            lines.append("")
+
     if not l2_tech_result:
         lines.append("L2 数据不可用")
         return "\n".join(lines)
@@ -495,6 +518,7 @@ def generate_daily_trading_html(
     l2_tech_result: dict,
     regime_result: dict = None,
     risk_assessment: dict = None,
+    sentiment_result: dict = None,
 ) -> str:
     """生成完整的可视化 HTML 报告（替代纯文本包装）"""
     now = datetime.now(timezone(timedelta(hours=8)))
@@ -564,6 +588,36 @@ def generate_daily_trading_html(
         + (f'<div class="conclusion-warn">{risk_note}</div>' if risk_note else "")
         + "</div>"
     )
+
+    # ── 市场情绪仪表盘 ──
+    if sentiment_result and sentiment_result.get("indicators"):
+        inds = sentiment_result["indicators"]
+        sent_parts = []
+        for key in ('leverage', 'turnover'):
+            ind = inds.get(key)
+            if ind and "N/A" not in str(ind.get('value', '')):
+                sent_parts.append(
+                    f'<span style="color:#6366f1">{ind["label"]}</span> '
+                    f'{ind["value"]} '
+                    f'<span style="color:{('#dc2626' if ind.get('pct', 50) >= 80 else '#16a34a')}">'
+                    f'({ind.get("pct", "")}%分位 {ind.get("signal", "")})</span>'
+                )
+        if sent_parts:
+            body.append(f'<div class="section" style="padding:10px 20px;font-size:.82rem">')
+            body.append(f'📊 市场情绪 · {" | ".join(sent_parts)}')
+            # 策略建议
+            for key in ('leverage', 'turnover'):
+                ind = inds.get(key)
+                if ind and key == 'leverage':
+                    pct = ind.get('pct', 50)
+                    if pct is not None:
+                        if pct < 5:
+                            body.append(f'<div style="color:#16a34a;margin-top:6px">✅ 融资出清极端低位 → 关注反弹机会，非进一步减仓</div>')
+                        elif pct < 20:
+                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 融资萎缩 → 配合warning确认但不足以上升到danger</div>')
+                        elif pct > 80:
+                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 杠杆偏高 → warning假信号概率高，可少减仓位</div>')
+            body.append(f'</div>')
 
     # ── 板块扫描 ──
     body.append('<div class="section"><div class="section-title">📊 板块扫描</div>')
