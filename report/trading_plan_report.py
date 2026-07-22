@@ -315,8 +315,12 @@ def generate_daily_trading_report(
     lines.append("")
     lines.append("  <b>每笔亏损 ≤ 总资金 1%</b>")
     lines.append("")
-    # 北向资金提醒（始终显示）
-    lines.append("  ⚠️ 北向连续3天净流出>50亿 → 即使无信号也提前减仓")
+    # 回补信号
+    if ra.get("re_entry_signal"):
+        lines.append("  📈 回补信号: 行业≥70%上涨 → 可一步回满仓位")
+        lines.append("")
+    # 融资余额提醒（始终显示）
+    lines.append("  ⚠️ 融资余额连续3日下降>1% → 去杠杆风险，提前减仓")
     lines.append("")
     lines.append("━" * 20)
     lines.append("⚠️ 技术指标参考，不构成投资建议")
@@ -649,9 +653,15 @@ def generate_daily_trading_html(
         "</div>"
     )
     body.append('<div class="plan-item"><b>每笔亏损 ≤ 总资金 1%</b></div>')
+    if ra.get("re_entry_signal"):
+        body.append(
+            f'<div class="plan-item" style="color:#16a34a;font-size:.82rem;margin-top:6px">'
+            f'📈 回补信号: 行业≥70%上涨 → 可一步回满仓位'
+            f'</div>'
+        )
     body.append(
         f'<div class="plan-item" style="color:#dc2626;font-size:.82rem;margin-top:6px">'
-        f'⚠️ 北向连续3天净流出>50亿 → 即使无信号也提前减仓'
+        f'⚠️ 融资余额连续3日下降>1% → 去杠杆风险，提前减仓'
         f'</div>'
     )
     body.append("</div>")

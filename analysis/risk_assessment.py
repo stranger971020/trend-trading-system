@@ -111,6 +111,10 @@ def assess_fragility(
         pos_cap = 100
         pos_desc = None
 
+    # 今日行业下跌比例（最后一天的值）
+    today_down_pct = l2_down_pct_history[-1] if l2_down_pct_history and len(l2_down_pct_history) > 0 else None
+    re_entry = today_down_pct is not None and today_down_pct <= 30
+
     return {
         'alert_level': alert_level,
         'alert_label': alert_label,
@@ -121,6 +125,8 @@ def assess_fragility(
         'p1_active': signals.get('p1_active', False),
         'p2_active': signals.get('p2_below_ma20', False),
         'p3_active': signals.get('p3_active', False),
+        'down_pct': today_down_pct,
+        're_entry_signal': re_entry,
     }
 
 
