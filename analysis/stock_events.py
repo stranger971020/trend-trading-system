@@ -1,7 +1,7 @@
 """
 个股风险事件缓存系统
-- 从 Tushare disclosure API 获取公告，分类提取减持/定增/质押等风险事件
-- 存储在 SQLite 中，避免每次运行重复调 Tushare API
+- 从巨潮资讯网 (cninfo.com.cn) 获取公告，分类提取减持/定增/质押等风险事件
+- 存储在 SQLite 中，避免每次运行重复请求
 - 首次获取后只做增量更新（仅拉最新数据）
 - 缓存 7 天有效，过期自动重新拉取
 """
@@ -12,9 +12,6 @@ import time
 from datetime import datetime, timedelta
 
 import pandas as pd
-import tushare as ts
-
-from config import TUSHARE_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +19,7 @@ TABLE = "stock_events"
 FETCH_DAYS = 90      # 首次拉取的天数
 INCR_DAYS = 14       # 增量拉取的天数
 CACHE_DAYS = 7       # 缓存有效期
-API_DELAY = 0.25     # API 调用间隔（限速）
+API_DELAY = 0.25     # 请求间隔（限速）
 
 # 风险关键词 → 显示标签
 RISK_KEYWORDS = [
@@ -70,7 +67,54 @@ def init_db(db_path: str):
     conn.close()
 
 
-def _classify(title: str) -> str | None:
+
+def _fetch_cninfo(code: str, page_size: int = 10) -> list[dict]:
+    """从巨潮资讯网获取股票公告（直连 cninfo.com.cn）"""
+    import requests
+    from datetime import datetime as _dt
+
+    # 去掉交易所后缀 (000001.SZ → 000001)
+    raw_code = code.replace(".SZ", "").replace(".SH", "").replace(".BJ", "")
+
+    def _cninfo_orgid(stock_code: str) -> str:
+        if not hasattr(_fetch_cninfo, "_orgid_map"):
+            try:
+                r = requests.get("http://www.cninfo.com.cn/new/data/szse_stock.json",
+                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                _fetch_cninfo._orgid_map = {s["code"]: s["orgId"]
+                                             for s in r.json().get("stockList", [])}
+            except Exception:
+                _fetch_cninfo._orgid_map = {}
+        org = _fetch_cninfo._orgid_map.get(stock_code)
+        if org: return org
+        return f"gssh0{stock_code}" if stock_code.startswith("6") else f"gssz0{stock_code}"
+
+    try:
+        org_id = _cninfo_orgid(raw_code)
+        payload = {"stock": f"{raw_code},{org_id}", "tabName": "fulltext",
+                   "pageSize": str(page_size), "pageNum": "1",
+                   "column": "szse", "category": "", "plate": "",
+                   "seDate": "", "searchkey": "", "secid": "",
+                   "sortName": "", "sortType": "", "isHLtitle": "true"}
+        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.cninfo.com.cn/"}
+        r = requests.post("https://www.cninfo.com.cn/new/hisAnnouncement/query",
+                          data=payload, headers=headers, timeout=15)
+        data = r.json()
+        results = []
+        for item in data.get("announcements", []):
+            ts_raw = item.get("announcementTime")
+            if isinstance(ts_raw, (int, float)):
+                d = _dt.fromtimestamp(ts_raw / 1000).strftime("%Y-%m-%d")
+            else:
+                d = str(ts_raw)[:10] if ts_raw else ""
+            results.append({"title": item.get("announcementTitle", ""), "date": d})
+        return results
+    except Exception as e:
+        logger.debug("cninfo %s: %s", code, e)
+        return []
+
+
+def _classify(title: str) :
     """根据标题关键词返回事件类型标签，无匹配则返回 None"""
     for kw, label in RISK_KEYWORDS:
         if kw in title:
@@ -110,7 +154,6 @@ def ensure_events(
     """
     init_db(db_path)
     conn = sqlite3.connect(db_path)
-    pro = ts.pro_api(TUSHARE_TOKEN)
     today = datetime.now().strftime("%Y%m%d")
     new_count = 0
     t0 = time.time()
@@ -122,27 +165,23 @@ def ensure_events(
         if not force and not _need_fetch(conn, code):
             continue  # 缓存有效，跳过
 
-        # 首次拉取用 FETCH_DAYS，增量用 INCR_DAYS
-        lookup_days = FETCH_DAYS if force else INCR_DAYS
-        start = (datetime.now() - timedelta(days=lookup_days)).strftime("%Y%m%d")
-
         try:
-            df = pro.disclosure(ts_code=code, start_date=start, end_date=today)
+            announcements = _fetch_cninfo(code)
         except Exception as e:
-            logger.warning("公告API失败 %s: %s", code, e)
+            logger.debug("公告获取失败 %s: %s", code, e)
             time.sleep(API_DELAY)
             continue
 
-        if df is None or df.empty:
+        if not announcements:
             time.sleep(API_DELAY)
             continue
 
-        for _, row in df.iterrows():
-            title = str(row.get("title", ""))
+        for ann in announcements:
+            title = ann.get("title", "")
             etype = _classify(title)
             if etype is None:
                 continue
-            ann_date = str(row.get("ann_date", row.get("end_date", "")))[:10]
+            ann_date = ann.get("date", today)[:10]
             try:
                 cur = conn.execute(
                     f"INSERT OR IGNORE INTO {TABLE} (ts_code, event_type, event_date, title) VALUES (?, ?, ?, ?)",
