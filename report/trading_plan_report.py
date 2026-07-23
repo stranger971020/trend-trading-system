@@ -23,6 +23,22 @@ MAX_WARN_SHOW = 4
 MAX_WEAK_SHOW = 4
 
 
+
+# 舆情情绪标签 → 中文显示
+sent_label_map = {
+    "calm": "平静 ✅",
+    "mild_negative": "微负面 📊",
+    "negative": "负面 ⚠️",
+    "panic": "恐慌 🔴",
+    "positive": "正面 📈",
+    "mild_positive": "偏暖 📈",
+    "excited": "兴奋 🔥",
+}
+
+sent_emoji_map = {
+    "calm": "✅", "negative": "⚠️", "panic": "🔴",
+    "mild_negative": "📊", "positive": "📈", "mild_positive": "📈", "excited": "🔥",
+}
 def _now_beijing():
     return datetime.now(BEIJING_TZ)
 
