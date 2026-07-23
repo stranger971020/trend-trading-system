@@ -53,17 +53,9 @@ def init_l2_table(db_path=DB_PATH):
         conn.execute(idx)
     conn.commit(); conn.close()
 
-def fetch_and_store_l2(db_path=DB_PATH, l2_mapping=None, retry_delay=600):
-    """
-    获取并存储 L2 行业日线数据。
-    若结果为 0 新数据，等待 retry_delay 秒后重试一次（应对数据源更新延迟）。
-    """
-    result = _fetch_l2_once(db_path, l2_mapping)
-    if result and result.get("new_rows", 0) == 0 and result.get("active", 0) > 80:
-        logger.info("L2 无新数据，等待 %d 秒后重试...", retry_delay)
-        time.sleep(retry_delay)
-        result = _fetch_l2_once(db_path, l2_mapping)
-    return result
+def fetch_and_store_l2(db_path=DB_PATH, l2_mapping=None):
+    """获取并存储 L2 行业日线数据。有新数据就用新的，没有就用现有的。"""
+    return _fetch_l2_once(db_path, l2_mapping)
 
 
 def _fetch_l2_once(db_path=DB_PATH, l2_mapping=None):
