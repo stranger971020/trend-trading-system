@@ -20,7 +20,7 @@ from typing import Optional, Dict, Any, List
 logger = logging.getLogger(__name__)
 BEIJING_TZ = timezone(timedelta(hours=8))
 
-# 负面关键词（可扩展）
+# 负面关键词
 NEGATIVE_KEYWORDS = [
     '暴跌', '崩盘', '恐慌', '抛售', '踩踏', '跌停', '熔断',
     '流动性危机', '债务违约', '信托暴雷', '外资撤离',
@@ -28,9 +28,22 @@ NEGATIVE_KEYWORDS = [
     '利空', '做空', '减持', '解禁', '资金出逃',
 ]
 
-# 市场情绪关键词
+# 正面/兴奋关键词
+POSITIVE_KEYWORDS = [
+    '暴涨', '涨停', '大涨', '突破', '创新高', '拉升',
+    '政策利好', '重磅利好', '重大突破', '超预期',
+    '放量上攻', '资金涌入', '北向加仓',
+]
+EXCITED_KEYWORDS = [
+    '牛市', '暴涨', '涨停潮', '全面爆发', '井喷',
+    '历史新高', '万亿成交', '抢筹',
+]
+
+# 市场情绪关键词（用于分级分类）
 PANIC_KEYWORDS = ['恐慌', '崩盘', '踩踏', '熔断', '流动性危机']
 CAUTION_KEYWORDS = ['暴跌', '抛售', '利空', '外资撤离', '做空']
+EXCITEMENT_KEYWORDS = ['暴涨', '涨停潮', '全面爆发', '井喷', '抢筹']
+BOOM_KEYWORDS = ['突破', '创新高', '超预期', '政策利好', '重大突破']
 
 
 def _cls_telegraph(page_size: int = 30) -> List[dict]:
@@ -60,17 +73,25 @@ def _cls_telegraph(page_size: int = 30) -> List[dict]:
 
 
 def _classify_sentiment(text: str) -> str:
-    """简单关键词情绪分类"""
-    text_lower = text.lower()
+    """简单关键词情绪分类（含正面/兴奋）"""
     for kw in PANIC_KEYWORDS:
         if kw in text:
             return 'panic'
+    for kw in EXCITEMENT_KEYWORDS:
+        if kw in text:
+            return 'excited'
     for kw in CAUTION_KEYWORDS:
         if kw in text:
             return 'negative'
+    for kw in BOOM_KEYWORDS:
+        if kw in text:
+            return 'positive'
     for kw in NEGATIVE_KEYWORDS:
         if kw in text:
             return 'negative'
+    for kw in POSITIVE_KEYWORDS:
+        if kw in text:
+            return 'positive'
     return 'neutral'
 
 
@@ -103,20 +124,33 @@ def analyze_news_sentiment() -> Dict[str, Any]:
     total = len(results)
     negative = [r for r in results if r['sentiment'] in ('negative', 'panic')]
     panic = [r for r in results if r['sentiment'] == 'panic']
+    positive = [r for r in results if r['sentiment'] in ('positive', 'excited')]
+    excited = [r for r in results if r['sentiment'] == 'excited']
     neg_count = len(negative)
     panic_count = len(panic)
+    pos_count = len(positive)
+    excited_count = len(excited)
     neg_pct = neg_count / total * 100 if total > 0 else 0
+    pos_pct = pos_count / total * 100 if total > 0 else 0
 
+    # 四级状态判定（优先极端，其次看占比）
     if panic_count > 2:
         level = 'panic'
+    elif excited_count > 3:
+        level = 'excited'
     elif neg_pct > 30:
         level = 'negative'
+    elif pos_pct > 30:
+        level = 'positive'
     elif neg_pct > 15:
-        level = 'mild'
+        level = 'mild_negative'
+    elif pos_pct > 15:
+        level = 'mild_positive'
     else:
         level = 'calm'
 
     top_negative = [r['title'] for r in negative[:3]] if negative else []
+    top_positive = [r['title'] for r in positive[:2]] if positive else []
 
     return {
         'sentiment_level': level,
@@ -124,7 +158,11 @@ def analyze_news_sentiment() -> Dict[str, Any]:
         'negative_count': neg_count,
         'panic_count': panic_count,
         'negative_pct': round(neg_pct, 1),
+        'positive_count': pos_count,
+        'excited_count': excited_count,
+        'positive_pct': round(pos_pct, 1),
         'top_negative': top_negative,
+        'top_positive': top_positive,
     }
 
 
@@ -148,35 +186,32 @@ def compute_confidence_overlay(
 
     sent = news_sentiment['sentiment_level']
 
-    # warning + 恐慌情绪 → 置信度升高
-    if warning_level in ('warning', 'danger') and sent == 'panic':
-        return {
-            'overlay': 'elevated',
-            'suggestion': '⚠️ 舆情恐慌+市场信号一致，严格执行减仓',
-        }
+    # 恐慌 → 警级提升
+    if sent in ('panic',):
+        if warning_level in ('warning', 'danger'):
+            return {'overlay': 'elevated', 'suggestion': '🔴 舆情恐慌+市场信号一致，严格执行减仓'}
+        elif warning_level == 'caution':
+            return {'overlay': 'elevated', 'suggestion': '🔴 舆情恐慌蔓延，建议提高仓位控制'}
+        else:
+            return {'overlay': 'normal', 'suggestion': '📊 舆情出现恐慌信号，即使无预警也应关注'}
 
-    # warning + 负面情绪 → 置信度升高
-    if warning_level in ('warning', 'danger') and sent == 'negative':
-        return {
-            'overlay': 'elevated',
-            'suggestion': '⚠️ 负面舆情配合确认，建议执行减仓',
-        }
+    # 负面 → 配合确认
+    if sent == 'negative':
+        if warning_level in ('warning', 'danger'):
+            return {'overlay': 'elevated', 'suggestion': '⚠️ 负面舆情配合确认，建议执行减仓'}
+        return {'overlay': 'normal', 'suggestion': '📊 负面舆情增多，保持关注'}
 
-    # caution + 恐慌 → 升级
-    if warning_level == 'caution' and sent == 'panic':
-        return {
-            'overlay': 'elevated',
-            'suggestion': '⚠️ 舆情恐慌蔓延，建议提高仓位控制',
-        }
+    # 兴奋 → 可能存在风险(过热)
+    if sent == 'excited':
+        if warning_level in ('warning', 'danger'):
+            return {'overlay': 'normal', 'suggestion': '🔥 舆情兴奋但市场偏弱，警惕情绪落差'}
+        return {'overlay': 'normal', 'suggestion': '🔥 市场情绪亢奋，注意过热风险'}
 
-    # 无 warning + 恐慌 → 提前关注
-    if warning_level == 'normal' and sent == 'panic':
-        return {
-            'overlay': 'normal',
-            'suggestion': '📊 舆情出现恐慌信号，即使无预警也应关注',
-        }
+    # 正面 → 正常偏暖
+    if sent == 'positive':
+        return {'overlay': 'normal', 'suggestion': None}
 
-    # warning + 无负面 → 正常执行
+    # 平静/微负面/微正面 → 无特殊建议
     return {'overlay': 'normal', 'suggestion': None}
 
 

@@ -224,7 +224,7 @@ def generate_daily_trading_report(
         ns = news_overlay.get("news_sentiment", {})
         ov = news_overlay.get("overlay", {})
         if ns.get("total_news", 0) > 0:
-            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild":"📊"}
+            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild_negative":"📊","positive":"📈","mild_positive":"📈","excited":"🔥"}
             emoji = sent_emoji.get(ns.get("sentiment_level",""), "📊")
             level_label = sent_label_map.get(ns.get("sentiment_level",""), ns.get("sentiment_level",""))
             lines.append(f"{emoji} 舆情 · {level_label} · 今日{ns.get('total_news', 0)}条 负面{ns.get('negative_pct', 0)}%")
@@ -640,7 +640,7 @@ def generate_daily_trading_html(
         ns = news_overlay.get("news_sentiment", {})
         ov = news_overlay.get("overlay", {})
         if ns.get("total_news", 0) > 0:
-            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild":"📊"}
+            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild_negative":"📊","positive":"📈","mild_positive":"📈","excited":"🔥"}
             body.append(f'<div class="section" style="padding:10px 20px;font-size:.82rem">')
             level_label = sent_label_map.get(ns.get("sentiment_level",""), ns.get("sentiment_level",""))
             body.append(f'{sent_emoji.get(ns.get("sentiment_level",""), "📊")} 舆情 · {level_label} · 今日{ns.get("total_news", 0)}条 负面{ns.get("negative_pct", 0)}%')
