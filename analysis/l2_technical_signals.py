@@ -263,17 +263,17 @@ def analyze_sector_stocks(db_path: str, chase_codes: list, latest_date: str, top
     top25 = all_picks[:25]
 
     # 缓存风险事件并为每只个股添加风险提示
+    # 个股风险事件（可选，API已变更时跳过）
     try:
-        codes = [p["code"] for p in top25]
         from analysis.stock_events import ensure_events, get_warnings_text
-        ensure_events(db_path, codes)
+        ensure_events(db_path, codes, timeout=10)
         for p in top25:
             try:
                 p["risk_warnings"] = get_warnings_text(db_path, p["code"])
             except Exception:
                 p["risk_warnings"] = ""
     except Exception as e:
-        logger.warning("风险事件缓存失败（不影响选股）: %s", e)
+        logger.info("风险事件跳过（不影响选股）: %s", e)
 
     return top25  # 最多25只(5板块×5只)
 

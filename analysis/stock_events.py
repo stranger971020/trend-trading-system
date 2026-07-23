@@ -94,6 +94,7 @@ def ensure_events(
     db_path: str,
     codes: list[str],
     force: bool = False,
+    timeout: int = 0,
 ) -> int:
     """确保指定个股的风险事件已缓存。
 
@@ -112,8 +113,12 @@ def ensure_events(
     pro = ts.pro_api(TUSHARE_TOKEN)
     today = datetime.now().strftime("%Y%m%d")
     new_count = 0
+    t0 = time.time()
 
     for i, code in enumerate(codes):
+        if timeout and (time.time() - t0) > timeout:
+            logger.info("ensure_events 超时(%ds)，跳过剩余 %d 只", timeout, len(codes) - i)
+            break
         if not force and not _need_fetch(conn, code):
             continue  # 缓存有效，跳过
 
