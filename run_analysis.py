@@ -705,12 +705,25 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         except Exception as e:
             logger.debug("情绪评估跳过: %s", e)
 
+        # 舆情监控
+        news_overlay = None
+        try:
+            from analysis.news_sentiment import run as run_news
+            news_overlay = run_news(
+                warning_level=risk_assessment.get("alert_level", "normal") if risk_assessment else "normal"
+            )
+            if news_overlay and news_overlay.get("overlay", {}).get("suggestion"):
+                logger.info("📰 舆情: %s", news_overlay["overlay"]["suggestion"])
+        except Exception as e:
+            logger.debug("舆情分析跳过: %s", e)
+
         trading_report_text = generate_daily_trading_report(
             l2_tech_result=l2_tech_result,
             regime_result=regime_result,
             key_levels_result=key_levels_result,
             risk_assessment=risk_assessment,
             sentiment_result=sentiment_result,
+            news_overlay=news_overlay,
         )
         logger.info("交易参考报告生成完成 (%d 字符)", len(trading_report_text))
     except Exception as e:
@@ -779,6 +792,7 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
                     regime_result=regime_result,
                     risk_assessment=risk_assessment,
                     sentiment_result=sentiment_result,
+                    news_overlay=news_overlay,
                 )
 
                 with open(trading_html_path, "w", encoding="utf-8") as f:

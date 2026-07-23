@@ -119,6 +119,7 @@ def generate_daily_trading_report(
     stock_result: dict = None,
     key_levels_result: dict = None,
     risk_assessment: dict = None,
+    news_overlay: dict = None,
 ) -> str:
     now = _now_beijing()
     date_str = now.strftime("%Y-%m-%d")
@@ -216,6 +217,19 @@ def generate_daily_trading_report(
             lines.append("📊 市场情绪 · " + " | ".join(parts))
             for t in tips:
                 lines.append(t)
+            lines.append("")
+
+    # 舆情叠加
+    if news_overlay:
+        ns = news_overlay.get("news_sentiment", {})
+        ov = news_overlay.get("overlay", {})
+        if ns.get("total_news", 0) > 0:
+            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild":"📊"}
+            emoji = sent_emoji.get(ns.get("sentiment_level",""), "📊")
+            lines.append(f"{emoji} 舆情 · 今日{ns.get('total_news', 0)}条 负面{ns.get('negative_pct', 0)}%")
+            sug = ov.get("suggestion", "")
+            if sug:
+                lines.append(f"  {sug}")
             lines.append("")
 
     if not l2_tech_result:
@@ -519,6 +533,7 @@ def generate_daily_trading_html(
     regime_result: dict = None,
     risk_assessment: dict = None,
     sentiment_result: dict = None,
+    news_overlay: dict = None,
 ) -> str:
     """生成完整的可视化 HTML 报告（替代纯文本包装）"""
     now = datetime.now(timezone(timedelta(hours=8)))
@@ -617,6 +632,20 @@ def generate_daily_trading_html(
                             body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 融资萎缩 → 配合warning确认但不足以上升到danger</div>')
                         elif pct > 80:
                             body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 杠杆偏高 → warning假信号概率高，可少减仓位</div>')
+            body.append(f'</div>')
+
+    # ── 舆情监控 ──
+    if news_overlay:
+        ns = news_overlay.get("news_sentiment", {})
+        ov = news_overlay.get("overlay", {})
+        if ns.get("total_news", 0) > 0:
+            sent_emoji = {"calm":"✅","negative":"⚠️","panic":"🔴","mild":"📊"}
+            body.append(f'<div class="section" style="padding:10px 20px;font-size:.82rem">')
+            body.append(f'{sent_emoji.get(ns.get("sentiment_level",""), "📊")} 舆情 · 今日{ns.get("total_news", 0)}条 负面{ns.get("negative_pct", 0)}%')
+            sug = ov.get("suggestion", "")
+            if sug:
+                color = "#dc2626" if ns.get("sentiment_level") in ("negative","panic") else "#6366f1"
+                body.append(f'<div style="color:{color};margin-top:4px">{ov["suggestion"]}</div>')
             body.append(f'</div>')
 
     # ── 板块扫描 ──
