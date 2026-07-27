@@ -1,0 +1,28 @@
+[
+  {
+    "date": "2026-07-26",
+    "time_slot": "morning",
+    "consensus": {
+      "score": -3,
+      "label": "⚠️ 偏空"
+    },
+    "markets": {
+      "adx": 35.0,
+      "regime": null
+    },
+    "backtest": {
+      "win_rate": 46.0,
+      "top3_avg": -0.5
+    },
+    "sectors": {
+      "chase": 12,
+      "weak": 53
+    },
+    "summary": {
+      "total_stocks": 0,
+      "industry_count": 0
+    },
+    "path": "reports/trading_20260726_morning.html",
+    "recorded_at": "2026-07-26T20:26:43.605202"
+  }
+]
