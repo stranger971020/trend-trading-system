@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>交易参考 2026-07-27</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.6;padding:16px;max-width:900px;margin:0 auto;-webkit-font-smoothing:antialiased}
+
+/* ── 头部 ── */
+.header{background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:24px 28px;border-radius:12px;margin-bottom:20px}
+.header h1{font-size:1.3rem;font-weight:700;letter-spacing:-0.3px}
+.header .time{font-size:.82rem;color:#94a3b8;margin-top:4px}
+
+/* ── 核心结论 ── */
+.conclusion{background:linear-gradient(135deg,#fef2f2,#fff);border-left:4px solid #ef4444;border-radius:10px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.conclusion-title{font-size:1.05rem;font-weight:700;color:#dc2626}
+.conclusion-title b{font-size:1.15rem}
+.conclusion-sub{font-size:.88rem;color:#64748b;margin-top:4px}
+.conclusion-warn{font-size:.85rem;color:#dc2626;margin-top:4px}
+
+/* ── 通用区块 ── */
+.section{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.section-title{font-size:1.05rem;font-weight:700;padding-bottom:12px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
+
+/* ── 板块分区卡片 ── */
+.zone-card{border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.zone-card.chase{background:#f0fdf4;border:1px solid #bbf7d0}
+.zone-card.watch{background:#eff6ff;border:1px solid #bfdbfe}
+.zone-card.warn{background:#fff7ed;border:1px solid #fed7aa}
+.zone-card.weak{background:#f8fafc;border:1px solid #e2e8f0}
+.zone-header{font-size:.95rem;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,.06)}
+.zone-header .count{font-size:.78rem;font-weight:400;color:#64748b;margin-left:4px}
+
+/* ── 板块项目 ── */
+.zone-item{padding:8px 0;border-bottom:1px solid #f1f5f9}
+.zone-item:last-child{border-bottom:none}
+.zone-name{font-size:.92rem;margin-bottom:2px}
+.zone-name .price{color:#64748b;font-size:.82rem}
+.zone-sig{margin:4px 0}
+.zone-pl{font-size:.82rem;color:#475569}
+.zone-pl .neg{color:#16a34a}
+.zone-pl .pos{color:#dc2626}
+
+/* ── 板块标签 ── */
+.tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:.72rem;font-weight:600;margin:1px 2px}
+.tag-green{background:#dcfce7;color:#166534}
+.tag-red{background:#fef2f2;color:#dc2626}
+.tag-orange{background:#fff7ed;color:#c2410c}
+.tag-yellow{background:#fefce8;color:#a16207}
+.tag-gray{background:#f1f5f9;color:#64748b}
+
+/* ── 观察区/弱势区项目 ── */
+.w-item{font-size:.85rem;padding:2px 0;color:#475569}
+.warn-item{padding:4px 0;font-size:.88rem}
+.warn-item b{color:#dc2626}
+
+/* ── 个股区块 ── */
+.sector-block{margin-bottom:16px}
+.sector-block:last-child{margin-bottom:0}
+.sector-title{font-size:.95rem;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0}
+.sector-title .score-badge{display:inline-block;padding:1px 10px;border-radius:10px;background:#eef2ff;color:#4f46e5;font-size:.78rem;margin-left:6px;vertical-align:middle}
+
+.stock-card{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;margin-bottom:8px}
+.stock-card:last-child{margin-bottom:0}
+.stock-head{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.stock-score{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.82rem;color:#fff;flex-shrink:0}
+.score-high{background:#4f46e5}
+.score-mid{background:#0891b2}
+.score-low{background:#78716c}
+.stock-name{font-weight:600;font-size:.9rem}
+.stock-metrics{font-size:.82rem;color:#64748b;margin:2px 0 2px 40px}
+.stock-risk{font-size:.78rem;color:#dc2626;margin:2px 0 2px 40px}
+.stock-pl{font-size:.82rem;color:#475569;margin-left:40px}
+.stock-pl .neg{color:#16a34a}
+.stock-pl .pos{color:#dc2626}
+
+/* ── 折叠按钮 ── */
+.fold-body{display:none}
+.fold-btn{display:inline-block;padding:5px 14px;margin-top:6px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#475569;font-size:.78rem;cursor:pointer;user-select:none}
+.fold-btn:hover{background:#e2e8f0}
+
+/* ── 交易计划 ── */
+.plan-item{font-size:.88rem;padding:3px 0}
+.plan-list{font-size:.85rem;color:#475569;padding:8px 0 4px 12px;line-height:1.8}
+
+/* ── 底部 ── */
+.footer{text-align:center;padding:12px 0;color:#94a3b8;font-size:.78rem}
+
+@media(max-width:640px){body{padding:8px}.header{padding:18px 20px}.section{padding:14px 16px}}
+</style>
+</head>
+<body>
+<div class="header"><h1>📊 每日交易参考</h1><div class="time">2026-07-27 · 21:58 CST</div><div style="font-size:.78rem;color:#94a3b8;margin-top:2px">数据截至 2026-07-27</div></div>
+<div class="conclusion"><div class="conclusion-title">📊 微盘预警：先行信号 · 建议仓位 <b>≤40%</b></div><div class="conclusion-sub">微盘股大面积下跌，全市场风险上升中 | 🐻 熊市</div></div>
+<div class="section" style="padding:10px 20px;font-size:.82rem"><span class="tag tag-red">⚠️ 偏空</span> <span class="tag tag-gray">ADX 36 · 强趋势</span> <span class="tag tag-green">回测胜率 46% · Top3均 -0.7%</span></div>
+<div class="section" style="padding:10px 20px;font-size:.82rem"><span class="tag tag-gray">支撑 3741.11</span> <span class="tag tag-gray">阻力 4052.04</span> <span class="tag tag-orange">支撑概率 中</span> <span class="tag tag-orange">阻力概率 中</span> <span class="tag tag-gray">➡️ stable</span></div>
+<div class="section" style="padding:10px 20px;font-size:.82rem">
+📊 市场情绪 · <span style="color:#6366f1">杠杆情绪</span> -1.2% <span style="color:#16a34a">(6%分位 去杠杆⚠️)</span>
+<div style="color:#dc2626;margin-top:6px">⚠️ 融资余额偏低 → 资金面偏弱，配合其他信号判断方向</div>
+</div>
+<div class="section" style="padding:10px 20px;font-size:.82rem">
+✅ 舆情 · 平静 ✅ · 今日50条 负面2.0%
+</div>
+<div class="section"><div class="section-title">📊 板块扫描</div>
+<div class="zone-card chase">
+<div class="zone-header">🚀 追涨区 <span class="count">16个</span></div>
+<div class="zone-item"><div class="zone-name"><b>中药Ⅱ</b> <span class="price">5665.73</span></div><div class="zone-sig"><span class="tag tag-green">RSI64↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 5533.82~5665.73 | <b class="neg">止损 5270.0 (-7.0%)</b> | <b class="pos">目标 5929.55 (+4.7%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>国有大型银行Ⅱ</b> <span class="price">1955.88</span></div><div class="zone-sig"><span class="tag tag-green">RSI67↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 1932.36~1955.88 | <b class="neg">止损 1885.32 (-3.6%)</b> | <b class="pos">目标 2002.92 (+2.4%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>股份制银行Ⅱ</b> <span class="price">4175.6</span></div><div class="zone-sig"><span class="tag tag-green">RSI69↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 4134.21~4175.6 | <b class="neg">止损 4051.43 (-3.0%)</b> | <b class="pos">目标 4258.38 (+2.0%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>农商行Ⅱ</b> <span class="price">762.39</span></div><div class="zone-sig"><span class="tag tag-green">RSI67↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 752.88~762.39 | <b class="neg">止损 733.85 (-3.7%)</b> | <b class="pos">目标 781.42 (+2.5%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>油服工程</b> <span class="price">2266.69</span></div><div class="zone-sig"><span class="tag tag-green">RSI61↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 2197.13~2266.69 | <b class="neg">止损 2058.0 (-9.2%)</b> | <b class="pos">目标 2405.82 (+6.1%)</b></div></div>
+<div id="fold-1" class="fold-body">
+<div class="zone-item"><div class="zone-name"><b>炼化及贸易</b> <span class="price">2914.16</span></div><div class="zone-sig"><span class="tag tag-green">RSI62↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 2853.08~2914.16 | <b class="neg">止损 2730.91 (-6.3%)</b> | <b class="pos">目标 3036.33 (+4.2%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>白酒Ⅱ</b> <span class="price">36171.16</span></div><div class="zone-sig"><span class="tag tag-green">RSI68↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 35649.49~36171.16 | <b class="neg">止损 34606.16 (-4.3%)</b> | <b class="pos">目标 37214.5 (+2.9%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>城商行Ⅱ</b> <span class="price">1034.74</span></div><div class="zone-sig"><span class="tag tag-green">RSI59↗</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 1022.74~1034.74 | <b class="neg">止损 998.75 (-3.5%)</b> | <b class="pos">目标 1058.73 (+2.3%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>保险Ⅱ</b> <span class="price">1192.43</span></div><div class="zone-sig"><span class="tag tag-orange">RSI71↓</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 1175.82~1192.43 | <b class="neg">止损 1142.59 (-4.2%)</b> | <b class="pos">目标 1225.65 (+2.8%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>养殖业</b> <span class="price">2602.96</span></div><div class="zone-sig"><span class="tag tag-gray">RSI50→</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 2549.16~2602.96 | <b class="neg">止损 2441.55 (-6.2%)</b> | <b class="pos">目标 2710.56 (+4.1%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>铁路公路</b> <span class="price">1499.24</span></div><div class="zone-sig"><span class="tag tag-green">RSI65↑</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 1479.14~1499.24 | <b class="neg">止损 1438.95 (-4.0%)</b> | <b class="pos">目标 1539.43 (+2.7%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>乘用车</b> <span class="price">14536.57</span></div><div class="zone-sig"><span class="tag tag-green">RSI60↗</span> <span class="tag tag-yellow">MACD转多</span></div><div class="zone-pl">入场 14283.47~14536.57 | <b class="neg">止损 13777.27 (-5.2%)</b> | <b class="pos">目标 15042.77 (+3.5%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>医药商业</b> <span class="price">4431.42</span></div><div class="zone-sig"><span class="tag tag-green">RSI57↗</span> <span class="tag tag-yellow">MACD转多</span></div><div class="zone-pl">入场 4335.14~4431.42 | <b class="neg">止损 4142.57 (-6.5%)</b> | <b class="pos">目标 4623.99 (+4.3%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>工业金属</b> <span class="price">3223.63</span></div><div class="zone-sig"><span class="tag tag-green">RSI59↗</span> <span class="tag tag-yellow">MACD转多</span></div><div class="zone-pl">入场 3140.95~3223.63 | <b class="neg">止损 2975.61 (-7.7%)</b> | <b class="pos">目标 3388.98 (+5.1%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>摩托车及其他</b> <span class="price">3293.26</span></div><div class="zone-sig"><span class="tag tag-green">RSI59↗</span> <span class="tag tag-yellow">MACD转多</span></div><div class="zone-pl">入场 3209.84~3293.26 | <b class="neg">止损 3043.01 (-7.6%)</b> | <b class="pos">目标 3460.09 (+5.1%)</b></div></div>
+<div class="zone-item"><div class="zone-name"><b>饮料乳品</b> <span class="price">6789.76</span></div><div class="zone-sig"><span class="tag tag-green">RSI56↗</span> <span class="tag tag-green">MACD多</span></div><div class="zone-pl">入场 6669.16~6789.76 | <b class="neg">止损 6427.96 (-5.3%)</b> | <b class="pos">目标 7030.96 (+3.6%)</b></div></div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-1')" data-label="11个">▸ 展开全部 (11个)</button>
+</div>
+<div class="zone-card watch">
+<div class="zone-header">👀 观察区 <span class="count">49个</span></div>
+<div class="w-item">物流: <span class="tag tag-gray">RSI48→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">航运港口: <span class="tag tag-green">RSI64↑</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">贵金属: <span class="tag tag-green">RSI60↑</span> <span class="tag tag-green">MACD多</span></div>
+<div id="fold-2" class="fold-body">
+<div class="w-item">非白酒: <span class="tag tag-green">RSI60↑</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">饲料: <span class="tag tag-gray">RSI44→</span> <span class="tag tag-green">MACD多</span></div>
+<div class="w-item">专业连锁Ⅱ: <span class="tag tag-green">RSI59↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">农产品加工: <span class="tag tag-green">RSI53↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">化妆品: <span class="tag tag-green">RSI50↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">小家电: <span class="tag tag-green">RSI50↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">房屋建设Ⅱ: <span class="tag tag-green">RSI54↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">普钢: <span class="tag tag-green">RSI57↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">渔业: <span class="tag tag-green">RSI56↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">焦炭Ⅱ: <span class="tag tag-green">RSI56↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">煤炭开采: <span class="tag tag-green">RSI60↗</span> <span class="tag tag-green">MACD多</span></div>
+<div class="w-item">酒店餐饮: <span class="tag tag-green">RSI55↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">一般零售: <span class="tag tag-green">RSI51↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">个护用品: <span class="tag tag-green">RSI51↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">农化制品: <span class="tag tag-green">RSI50↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">医疗器械: <span class="tag tag-green">RSI51↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">基础建设: <span class="tag tag-green">RSI55↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">工程机械: <span class="tag tag-gray">RSI43→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">房地产服务: <span class="tag tag-green">RSI54↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">旅游及景区: <span class="tag tag-green">RSI52↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">汽车服务: <span class="tag tag-green">RSI52↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">燃气Ⅱ: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">生物制品: <span class="tag tag-green">RSI50↗</span> <span class="tag tag-yellow">MACD柱缩</span></div>
+<div class="w-item">电力: <span class="tag tag-green">RSI57↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">电视广播Ⅱ: <span class="tag tag-green">RSI57↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">种植业: <span class="tag tag-green">RSI54↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">纺织制造: <span class="tag tag-green">RSI51↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">通信服务: <span class="tag tag-green">RSI53↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">食品加工: <span class="tag tag-green">RSI55↗</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">IT服务Ⅱ: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">互联网电商: <span class="tag tag-gray">RSI47→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">出版: <span class="tag tag-gray">RSI48→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">化学制药: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD柱缩</span></div>
+<div class="w-item">厨卫电器: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">商用车: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">多元金融: <span class="tag tag-gray">RSI47→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">广告营销: <span class="tag tag-gray">RSI48→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">文娱用品: <span class="tag tag-gray">RSI41→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">水泥: <span class="tag tag-gray">RSI46→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">特钢Ⅱ: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">航空机场: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">调味发酵品Ⅱ: <span class="tag tag-gray">RSI49→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">贸易Ⅱ: <span class="tag tag-gray">RSI45→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">轨交设备Ⅱ: <span class="tag tag-gray">RSI50→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">造纸: <span class="tag tag-gray">RSI48→</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="w-item">饰品: <span class="tag tag-gray">RSI48→</span> <span class="tag tag-yellow">MACD转多</span></div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-2')" data-label="46个">▸ 展开全部 (46个)</button>
+</div>
+<div class="zone-card warn">
+<div class="zone-header">🔻 高位区 <span class="count">19个</span></div>
+<div class="zone-item warn-item"><b>白色家电</b>: <span class="tag tag-red">RSI80↓⚠️</span> <span class="tag tag-red">⚠️MACD背离</span></div>
+<div class="zone-item warn-item"><b>休闲食品</b>: <span class="tag tag-gray">RSI38↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>光学光电子</b>: <span class="tag tag-red">RSI30⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>动物保健Ⅱ</b>: <span class="tag tag-gray">RSI34↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>家电零部件Ⅱ</b>: <span class="tag tag-red">RSI25⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div id="fold-3" class="fold-body">
+<div class="zone-item warn-item"><b>橡胶</b>: <span class="tag tag-red">RSI25⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>自动化设备</b>: <span class="tag tag-red">RSI28⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>航天装备Ⅱ</b>: <span class="tag tag-gray">RSI32↓</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>航海装备Ⅱ</b>: <span class="tag tag-gray">RSI34↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>航空装备Ⅱ</b>: <span class="tag tag-gray">RSI38↓</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="zone-item warn-item"><b>装修建材</b>: <span class="tag tag-gray">RSI37↓</span> <span class="tag tag-yellow">MACD转多</span></div>
+<div class="zone-item warn-item"><b>金属新材料</b>: <span class="tag tag-red">RSI24⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>家居用品</b>: <span class="tag tag-gray">RSI31↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>服装家纺</b>: <span class="tag tag-red">RSI28⚠️</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>汽车零部件</b>: <span class="tag tag-red">RSI29⚠️</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>游戏Ⅱ</b>: <span class="tag tag-gray">RSI36↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>综合Ⅱ</b>: <span class="tag tag-gray">RSI37↓</span> <span class="tag tag-red">MACD空</span></div>
+<div class="zone-item warn-item"><b>电机Ⅱ</b>: <span class="tag tag-red">RSI29⚠️</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+<div class="zone-item warn-item"><b>黑色家电</b>: <span class="tag tag-gray">RSI32↓</span> <span class="tag tag-red">MACD空</span> <span class="tag tag-yellow">量缩⚠️</span></div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-3')" data-label="14个">▸ 展开全部 (14个)</button>
+</div>
+<div class="zone-card weak">
+<div class="zone-header">⛔ 弱势区 <span class="count">39个</span></div>
+<div class="w-item">光伏设备、风电设备、冶钢原料、化学纤维、环境治理、证券Ⅱ</div>
+<div id="fold-4" class="fold-body">
+<div class="w-item">通信设备、专业工程、专业服务、专用设备、元件、其他电子Ⅱ、其他电源设备Ⅱ、军工电子Ⅱ、包装印刷、化学制品、化学原料、半导体、地面兵装Ⅱ、塑料、小金属、工程咨询服务Ⅱ、影视院线、房地产开发、教育、数字媒体、消费电子、照明设备Ⅱ、环保设备Ⅱ、玻璃玻纤、电子化学品Ⅱ、电池、电网设备、能源金属、装修装饰Ⅱ、计算机设备、软件开发、通用设备、非金属材料Ⅱ</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-4')" data-label="33个">▸ 展开全部 (33个)</button>
+</div>
+</div>
+<div class="section"><div class="section-title">📈 精选个股</div>
+<div class="sector-block">
+<div class="sector-title">🚀 中药Ⅱ <span class="score-badge">强度 8.9</span></div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-high">8.9</span>
+<span class="stock-name">汉森制药 (002412.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 7.3 | 动量 +23.9% | 量比 1.90
+</div>
+<div class="stock-pl">入场 7.13~7.3 | <b class="neg">止损 6.79 (-7.0%)</b> | <b class="pos">目标 7.64 (+4.7%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-high">8.8</span>
+<span class="stock-name">陇神戎发 (300534.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 13.42 | 动量 +82.3% | 量比 1.72
+</div>
+<div class="stock-pl">入场 13.11~13.42 | <b class="neg">止损 12.48 (-7.0%)</b> | <b class="pos">目标 14.04 (+4.6%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-high">8.7</span>
+<span class="stock-name">珍宝岛 (603567.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 6.44 | 动量 +29.8% | 量比 1.70
+</div>
+<div class="stock-pl">入场 6.29~6.44 | <b class="neg">止损 5.99 (-7.0%)</b> | <b class="pos">目标 6.74 (+4.7%)</b></div>
+</div>
+<div id="fold-5" class="fold-body">
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-mid">7.5</span>
+<span class="stock-name">片仔癀 (600436.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 134.27 | 动量 +17.5% | 量比 1.16
+</div>
+<div class="stock-pl">入场 131.14~134.27 | <b class="neg">止损 124.89 (-7.0%)</b> | <b class="pos">目标 140.52 (+4.7%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-mid">7.5</span>
+<span class="stock-name">益佰制药 (600594.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 3.63 | 动量 +16.4% | 量比 1.30
+</div>
+<div class="stock-pl">入场 3.55~3.63 | <b class="neg">止损 3.38 (-6.9%)</b> | <b class="pos">目标 3.8 (+4.7%)</b></div>
+</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-5')" data-label="2个">▸ 展开全部 (2个)</button>
+</div>
+<div class="sector-block">
+<div class="sector-title">🚀 油服工程 <span class="score-badge">强度 7.4</span></div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-mid">7.4</span>
+<span class="stock-name">通源石油 (300164.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 10.49 | 动量 +16.0% | 量比 1.30
+</div>
+<div class="stock-pl">入场 10.17~10.49 | <b class="neg">止损 9.52 (-9.2%)</b> | <b class="pos">目标 11.13 (+6.1%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-mid">7.4</span>
+<span class="stock-name">科力股份 (920088.BJ)</span>
+</div>
+<div class="stock-metrics">
+现价 44.68 | 动量 +19.6% | 量比 1.33
+</div>
+<div class="stock-pl">入场 43.31~44.68 | <b class="neg">止损 40.57 (-9.2%)</b> | <b class="pos">目标 47.42 (+6.1%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">3.9</span>
+<span class="stock-name">中海油服 (601808.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 12.15 | 动量 +1.9% | 量比 1.23
+</div>
+<div class="stock-pl">入场 11.78~12.15 | <b class="neg">止损 11.03 (-9.2%)</b> | <b class="pos">目标 12.9 (+6.2%)</b></div>
+</div>
+<div id="fold-6" class="fold-body">
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">3.8</span>
+<span class="stock-name">海油工程 (600583.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 5.53 | 动量 +1.3% | 量比 1.27
+</div>
+<div class="stock-pl">入场 5.36~5.53 | <b class="neg">止损 5.02 (-9.2%)</b> | <b class="pos">目标 5.87 (+6.1%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">2.9</span>
+<span class="stock-name">中曼石油 (603619.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 20.43 | 动量 -7.7% | 量比 1.32
+</div>
+<div class="stock-pl">入场 19.8~20.43 | <b class="neg">止损 18.55 (-9.2%)</b> | <b class="pos">目标 21.68 (+6.1%)</b></div>
+</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-6')" data-label="2个">▸ 展开全部 (2个)</button>
+</div>
+<div class="sector-block">
+<div class="sector-title">🚀 炼化及贸易 <span class="score-badge">强度 7.1</span></div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-mid">7.1</span>
+<span class="stock-name">中国石油 (601857.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 10.9 | 动量 +12.6% | 量比 1.07
+</div>
+<div class="stock-pl">入场 10.67~10.9 | <b class="neg">止损 10.21 (-6.3%)</b> | <b class="pos">目标 11.36 (+4.2%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">5.8</span>
+<span class="stock-name">华锦股份 (000059.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 4.55 | 动量 +10.7% | 量比 0.80
+</div>
+<div class="stock-pl">入场 4.45~4.55 | <b class="neg">止损 4.26 (-6.4%)</b> | <b class="pos">目标 4.74 (+4.2%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">5.4</span>
+<span class="stock-name">中国石化 (600028.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 5.15 | 动量 +8.0% | 量比 0.98
+</div>
+<div class="stock-pl">入场 5.04~5.15 | <b class="neg">止损 4.83 (-6.2%)</b> | <b class="pos">目标 5.37 (+4.3%)</b></div>
+</div>
+<div id="fold-7" class="fold-body">
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.0</span>
+<span class="stock-name">广汇能源 (600256.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 5.42 | 动量 +3.4% | 量比 1.04
+</div>
+<div class="stock-pl">入场 5.31~5.42 | <b class="neg">止损 5.08 (-6.3%)</b> | <b class="pos">目标 5.65 (+4.2%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">3.7</span>
+<span class="stock-name">ST沈化 (000698.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 3.24 | 动量 +4.5% | 量比 0.65
+</div>
+<div class="stock-pl">入场 3.17~3.24 | <b class="neg">止损 3.04 (-6.2%)</b> | <b class="pos">目标 3.38 (+4.3%)</b></div>
+</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-7')" data-label="2个">▸ 展开全部 (2个)</button>
+</div>
+<div class="sector-block">
+<div class="sector-title">🚀 白酒Ⅱ <span class="score-badge">强度 5.7</span></div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">5.7</span>
+<span class="stock-name">山西汾酒 (600809.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 123.06 | 动量 +8.3% | 量比 1.00
+</div>
+<div class="stock-pl">入场 121.29~123.06 | <b class="neg">止损 117.74 (-4.3%)</b> | <b class="pos">目标 126.61 (+2.9%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">5.5</span>
+<span class="stock-name">古井贡酒 (000596.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 87.75 | 动量 +6.3% | 量比 1.65
+</div>
+<div class="stock-pl">入场 86.48~87.75 | <b class="neg">止损 83.95 (-4.3%)</b> | <b class="pos">目标 90.28 (+2.9%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.5</span>
+<span class="stock-name">贵州茅台 (600519.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 1289.5 | 动量 +3.9% | 量比 1.02
+</div>
+<div class="stock-pl">入场 1270.9~1289.5 | <b class="neg">止损 1233.71 (-4.3%)</b> | <b class="pos">目标 1326.7 (+2.9%)</b></div>
+</div>
+<div id="fold-8" class="fold-body">
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.4</span>
+<span class="stock-name">今世缘 (603369.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 25.84 | 动量 +5.9% | 量比 0.79
+</div>
+<div class="stock-pl">入场 25.47~25.84 | <b class="neg">止损 24.72 (-4.3%)</b> | <b class="pos">目标 26.59 (+2.9%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.2</span>
+<span class="stock-name">泸州老窖 (000568.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 83.73 | 动量 +3.0% | 量比 1.00
+</div>
+<div class="stock-pl">入场 82.52~83.73 | <b class="neg">止损 80.11 (-4.3%)</b> | <b class="pos">目标 86.15 (+2.9%)</b></div>
+</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-8')" data-label="2个">▸ 展开全部 (2个)</button>
+</div>
+<div class="sector-block">
+<div class="sector-title">🚀 农商行Ⅱ <span class="score-badge">强度 4.7</span></div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.7</span>
+<span class="stock-name">张家港行 (002839.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 4.36 | 动量 +5.6% | 量比 1.03
+</div>
+<div class="stock-pl">入场 4.31~4.36 | <b class="neg">止损 4.2 (-3.7%)</b> | <b class="pos">目标 4.47 (+2.5%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.7</span>
+<span class="stock-name">青农商行 (002958.SZ)</span>
+</div>
+<div class="stock-metrics">
+现价 2.99 | 动量 +5.3% | 量比 1.14
+</div>
+<div class="stock-pl">入场 2.95~2.99 | <b class="neg">止损 2.88 (-3.7%)</b> | <b class="pos">目标 3.06 (+2.3%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.2</span>
+<span class="stock-name">瑞丰银行 (601528.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 4.8 | 动量 +3.2% | 量比 1.22
+</div>
+<div class="stock-pl">入场 4.74~4.8 | <b class="neg">止损 4.62 (-3.7%)</b> | <b class="pos">目标 4.92 (+2.5%)</b></div>
+</div>
+<div id="fold-9" class="fold-body">
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">4.0</span>
+<span class="stock-name">渝农商行 (601077.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 6.58 | 动量 +3.1% | 量比 1.06
+</div>
+<div class="stock-pl">入场 6.5~6.58 | <b class="neg">止损 6.33 (-3.8%)</b> | <b class="pos">目标 6.74 (+2.4%)</b></div>
+</div>
+<div class="stock-card">
+<div class="stock-head">
+<span class="stock-score score-low">3.9</span>
+<span class="stock-name">沪农商行 (601825.SH)</span>
+</div>
+<div class="stock-metrics">
+现价 8.34 | 动量 +1.2% | 量比 1.05
+</div>
+<div class="stock-pl">入场 8.24~8.34 | <b class="neg">止损 8.03 (-3.7%)</b> | <b class="pos">目标 8.55 (+2.5%)</b></div>
+</div>
+</div>
+<button class="fold-btn" onclick="toggleFold('fold-9')" data-label="2个">▸ 展开全部 (2个)</button>
+</div>
+</div>
+<div class="section"><div class="section-title">⚠️ 顶部预警</div>
+<div class="warn-item"><b>白色家电</b> — MACD顶背离</div>
+</div>
+<div class="section"><div class="section-title">📋 今日交易计划</div>
+<div class="plan-item"><b>仓位</b> ≤40%　微盘股大面积下跌，全市场风险上升中</div>
+<div class="plan-list">① 持仓缩量回MA20 → 持有<br>② 放量跌破止损 → 离场<br>③ 先行信号期 → ≤40%仓位，等待数据确认方向</div>
+<div class="plan-item"><b>每笔亏损 ≤ 总资金 1%</b></div>
+<div class="plan-item" style="color:#dc2626;font-size:.82rem;margin-top:6px">⚠️ 融资余额连续3日下降>1% → 去杠杆风险，提前减仓</div>
+</div>
+<div style="font-size:.75rem;color:#94a3b8;text-align:center;padding:8px 0">⚠️ 数据源: 17/20 正常 | 异常: module0, module2_l3, module0_l2</div>
+<div class="footer">⚠️ 技术指标参考，不构成投资建议<br><a href="https://stranger971020.github.io/trend-trading-system/reports/trading_report_guide.html" style="color:#6366f1;text-decoration:none">📖 完整策略说明</a></div>
+<script>
+function toggleFold(fid){
+  var el=document.getElementById(fid);if(!el)return;
+  var h=el.style.display!=='none'&&el.style.display!=='';
+  el.style.display=h?'none':'block';
+  var btn=el.nextElementSibling;
+  if(btn&&btn.classList.contains('fold-btn')){
+    var label=btn.getAttribute('data-label');
+    btn.textContent=h?'▸ 展开全部 ('+label+')':'▸ 收起';
+  }
+}
+</script>
+</body>
+</html>
