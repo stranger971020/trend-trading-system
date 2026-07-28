@@ -77,7 +77,7 @@ from analysis.crowding_warning import detect_crowding
 from analysis.atr_stop_loss import compute_stop_loss
 from analysis.moneyflow_filter import fetch_and_cache_moneyflow, apply_moneyflow_filter
 from analysis.fundamental_factors import compute_fundamental_score
-from analysis.ml_model import load_model, rerank_with_ml, build_feature_matrix
+from analysis.ml_model import rerank_with_ml
 from analysis.margin_warning import fetch_today_margin, detect_margin_divergence
 from analysis.virtual_portfolio import update_portfolio, get_portfolio_summary
 from analysis.anomaly_detector import detect_anomalies
@@ -110,6 +110,46 @@ logger = logging.getLogger("run_analysis")
 # ============================================================
 # 主流程
 # ============================================================
+
+def _compute_market_dashboard(db_path: str) -> dict:
+    """动态计算多周期动量、行业广度、个股涨跌比。"""
+    import numpy as np
+    import sqlite3 as _sql
+    conn = _sql.connect(db_path)
+    result = {}
+    idx = pd.read_sql("SELECT trade_date, AVG(close) as close FROM sw_index_daily GROUP BY trade_date ORDER BY trade_date", conn)
+    if not idx.empty and len(idx) >= 61:
+        closes = idx["close"].values
+        for label, d in [("idx_5d", 5), ("idx_20d", 20), ("idx_60d", 60)]:
+            if len(closes) > d: result[label] = round((closes[-1] / closes[-(d+1)] - 1) * 100, 1)
+        if len(closes) >= 200:
+            ma200 = float(np.mean(closes[-200:]))
+            result["above_ma200"] = closes[-1] > ma200; result["ma200"] = round(ma200, 0)
+        result["idx_level"] = round(float(closes[-1]), 0)
+    ind = pd.read_sql("SELECT trade_date, ts_code, name, close FROM sw_index_daily ORDER BY trade_date", conn)
+    ind["trade_date"] = ind["trade_date"].astype(str)
+    above_ma20, ind_total, ind_mom = 0, 0, {}
+    for c in ind["ts_code"].unique():
+        s = ind[ind["ts_code"] == c].sort_values("trade_date")
+        if len(s) < 21: continue
+        ind_total += 1
+        if s["close"].iloc[-1] > s["close"].iloc[-20:].mean(): above_ma20 += 1
+        ind_mom[s["name"].iloc[-1]] = round((s["close"].iloc[-1] / s["close"].iloc[-21] - 1) * 100, 1)
+    result["breadth_str"] = f"{above_ma20}/{ind_total}"
+    result["breadth_pct"] = round(above_ma20 / ind_total * 100) if ind_total else 0
+    si = sorted(ind_mom.items(), key=lambda x: -x[1])
+    result["top_sectors"] = si[:3]; result["bot_sectors"] = si[-3:]
+    stock = pd.read_sql("SELECT ts_code, trade_date, close FROM stock_daily ORDER BY trade_date", conn)
+    stock["trade_date"] = stock["trade_date"].astype(str)
+    mom5_pos, stock_total = 0, 0
+    for c in stock["ts_code"].unique():
+        s = stock[stock["ts_code"] == c].sort_values("trade_date")
+        if len(s) >= 6:
+            stock_total += 1
+            if s["close"].iloc[-1] > s["close"].iloc[-6]: mom5_pos += 1
+    result["stock_5d_up_pct"] = round(mom5_pos / stock_total * 100) if stock_total else 0
+    conn.close(); return result
+
 
 def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> bool:
     """执行完整分析流程。
@@ -548,24 +588,13 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         logger.error("基本面因子失败: %s", e)
         module_status["fundamental"] = "failed"
 
-    # ML 模型重排
+    # ML 模型重排（rerank_with_ml 内部从缓存加载特征，按 micro/mid 分组推理）
     try:
-        ml_model = load_model()
-        if ml_model is not None and stock_result.get("stocks"):
-            # 构建今日特征
-            today_features = build_feature_matrix(
-                stock_daily_df, daily_df, stock_mapping,
-                persistence_scores={
-                    "l1": {r["ts_code"]: r["persistence_score"] for _, r in persistence_result.get("df", pd.DataFrame()).iterrows()}
-                    if persistence_result.get("df") is not None else {},
-                },
-            )
+        if stock_result.get("stocks"):
             stock_result["stocks"] = rerank_with_ml(
-                stock_result["stocks"], today_features, ml_model
+                stock_result["stocks"], stock_daily_df, models=None
             )
             module_status["ml_rerank"] = "success"
-        elif ml_model is None:
-            module_status["ml_rerank"] = "skipped"
         else:
             module_status["ml_rerank"] = "skipped"
     except Exception as e:
@@ -642,36 +671,15 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     logger.info("=" * 40)
     logger.info("生成报告...")
 
-    # 8a. 个股推荐（含止损与概率）
+    # [废弃] A股趋势日报已停止生成
+    report_text = None
     stock_picks_text = None
     stock_picks_html = None
-    try:
-        latest_stock_date = data_summary.get("stock_latest_date", "latest")
-        stock_picks_text = generate_picks_text(date=latest_stock_date, top_n=5)
-        stock_picks_html = generate_picks_html(date=latest_stock_date, top_n=5)
-        logger.info("个股推荐生成完成")
-    except Exception as e:
-        logger.warning("个股推荐生成失败（可选模块，不影响主流程）: %s", e)
+    logger.info("[SKIP] A股日报已废弃")
 
-    # 8b. 文字版报告（Telegram）
-    try:
-        report_text = generate_report(
-            sentiment_result=sentiment_result,
-            persistence_result=persistence_result,
-            stock_result=stock_result,
-            module_status=module_status,
-            data_summary=data_summary,
-            stock_derived_industry_result=stock_derived_industry_result,
-            stock_picks_text=stock_picks_text,
-            regime_result=regime_result,
-            key_levels_result=key_levels_result,
-        )
-        logger.info("文字报告生成完成 (%d 字符)", len(report_text))
-    except Exception as e:
-        logger.critical("文字报告生成失败: %s", e, exc_info=True)
-        report_text = f"<b>A股趋势交易系统 - 报告生成失败</b>\n\n错误: {e}"
-
-    # 8b-2. L2 技术指标 + 交易参考报告（新版）
+    # ═══════════════════════════════════════════════════
+    # ✅ 每日交易参考（当前唯一实盘报告）
+    # ═══════════════════════════════════════════════════
     trading_report_text = None
     try:
         from analysis.l2_technical_signals import compute_l2_technical_signals
@@ -717,6 +725,20 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
         except Exception as e:
             logger.debug("舆情分析跳过: %s", e)
 
+        # ── 注入 ML 评分 Top 5 ──
+        ml_scored = [s for s in stock_result.get("stocks", []) if s.get("ml_score") is not None]
+        ml_top5 = sorted(ml_scored, key=lambda x: x["ml_score"], reverse=True)[:5]
+        if ml_top5 and stock_daily_df is not None:
+            latest_date = stock_daily_df["trade_date"].max()
+            latest = stock_daily_df[stock_daily_df["trade_date"] == latest_date]
+            for p in ml_top5:
+                code = p.get("ts_code", "")
+                sd = latest[latest[COL_TS_CODE] == code]
+                if not sd.empty:
+                    p["close"] = float(sd["close"].iloc[0])
+            l2_tech_result["ml_top5"] = ml_top5
+            logger.info("ML Top 5 注入交易参考: %d 只", len(ml_top5))
+
         trading_report_text = generate_daily_trading_report(
             l2_tech_result=l2_tech_result,
             regime_result=regime_result,
@@ -724,115 +746,65 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
             risk_assessment=risk_assessment,
             sentiment_result=sentiment_result,
             news_overlay=news_overlay,
+                market_dashboard=_compute_market_dashboard(DB_PATH),
         )
         logger.info("交易参考报告生成完成 (%d 字符)", len(trading_report_text))
     except Exception as e:
         logger.warning("交易参考报告生成失败: %s", e, exc_info=True)
 
-    # 8b. HTML 报告
+    # [废弃] A股日报 HTML 不再生成
     html_path = None
+    logger.info("[SKIP] A股日报 HTML 已废弃")
+
+    # ---- 新版交易参考报告（HTML 版） — 保存到 reports/trading_*.html ----
+    REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+    now = datetime.now(timezone(timedelta(hours=8)))  # 北京时间
+    report_date = now.strftime("%Y%m%d")
+    time_slot = "morning" if now.hour < 14 else "evening"  # 14点前 = morning，之后 = evening
+    trading_html_path = None
     try:
-        reports_dir = os.path.join(PROJECT_ROOT, "reports")
-        os.makedirs(reports_dir, exist_ok=True)
-        now = datetime.now()
-        time_slot = "morning" if morning else "evening"
-        report_date = now.strftime("%Y%m%d")
-        html_filename = f"report_{report_date}_{time_slot}.html"
-        html_path = os.path.join(reports_dir, html_filename)
-
-        # 持续性趋势数据
-        trend_codes = []
-        if persistence_result.get("df") is not None:
-            trend_codes = persistence_result["df"].head(10)["ts_code"].tolist()
-        persistence_trend = _load_persistence_trend(trend_codes) if trend_codes else {}
-
-        html_content = generate_html_report(
-            sentiment_result=sentiment_result,
-            persistence_result=persistence_result,
-            stock_result=stock_result,
-            module_status=module_status,
-            data_summary=data_summary,
-            l3_leading_result=l3_leading_result,  # None (L3 已停用)
-            l3_persistence_result=l3_persistence_result,  # None (L3 已停用)
-            l2_leading_result=l2_leading_result,
-            l2_persistence_result=l2_persistence_result,
-            regime_result=regime_result,
-            crowding_result=crowding_result,
-            portfolio_result=portfolio_result,
-            anomaly_result=anomaly_result,
-            time_slot=time_slot,
-            persistence_trend=persistence_trend,
-            stock_derived_industry_result=stock_derived_industry_result,
-            stock_picks_html=stock_picks_html,
-        )
-
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-
-        # latest 链接
-        if morning:
-            latest_path = os.path.join(reports_dir, "latest_morning.html")
-        else:
-            latest_path = os.path.join(reports_dir, "latest.html")
-        with open(latest_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-
-        logger.info("HTML 报告已保存: %s (%d 字节)", html_path, len(html_content))
-
-        # ---- 新版交易参考报告（HTML 版） — 保存到 reports/trading_*.html ----
-        trading_html_path = None
         if trading_report_text:
-            try:
-                trading_html_filename = f"trading_{report_date}_{time_slot}.html"
-                trading_html_path = os.path.join(reports_dir, trading_html_filename)
+            trading_html_filename = f"trading_{report_date}_{time_slot}.html"
+            trading_html_path = os.path.join(REPORTS_DIR, trading_html_filename)
 
-                from report.trading_plan_report import generate_daily_trading_html
-                trading_html_content = generate_daily_trading_html(
-                    l2_tech_result=l2_tech_result,
-                    regime_result=regime_result,
-                    risk_assessment=risk_assessment,
-                    sentiment_result=sentiment_result,
-                    news_overlay=news_overlay,
-                )
+            from report.trading_plan_report import generate_daily_trading_html
+            trading_html_content = generate_daily_trading_html(
+                l2_tech_result=l2_tech_result,
+                regime_result=regime_result,
+                risk_assessment=risk_assessment,
+                sentiment_result=sentiment_result,
+                news_overlay=news_overlay,
+            )
 
-                with open(trading_html_path, "w", encoding="utf-8") as f:
-                    f.write(trading_html_content)
-                logger.info("交易参考 HTML 已保存: %s (%d 字节)", trading_html_path, len(trading_html_content))
-            except Exception as e:
-                logger.warning("交易参考 HTML 保存失败: %s", e)
+            with open(trading_html_path, "w", encoding="utf-8") as f:
+                f.write(trading_html_content)
+            logger.info("交易参考 HTML 已保存: %s (%d 字节)", trading_html_path, len(trading_html_content))
     except Exception as e:
-        logger.error("HTML 报告生成失败: %s", e, exc_info=True)
+        logger.warning("交易参考 HTML 保存失败: %s", e)
 
     # 打印报告到控制台
     print("\n" + "=" * 60)
-    print(report_text.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", ""))
+    if report_text:
+        print(report_text.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", ""))
     print("=" * 60)
     if html_path:
         print(f"📄 HTML 报告: {html_path}")
 
-        # 自动推送报告到 GitHub
-        if not dry_run:
-            try:
-                _git_push_reports(report_date)
-                logger.info("报告已推送到 GitHub")
-            except Exception as e:
-                logger.warning("GitHub 推送失败（不影响报告生成）: %s", e)
+    # 自动推送报告到 GitHub
+    if not dry_run:
+        try:
+            _git_push_reports(report_date)
+            logger.info("报告已推送到 GitHub")
+        except Exception as e:
+            logger.warning("GitHub 推送失败（不影响报告生成）: %s", e)
 
-        # 同步报告到 Obsidian Vault
-        if not dry_run:
+        # 同步交易参考报告到 Obsidian
+        if trading_html_path:
             try:
-                _sync_report_to_obsidian(html_path, report_date, time_slot)
-                logger.info("报告已同步到 Obsidian Vault")
+                _sync_report_to_obsidian(trading_html_path, report_date, time_slot)
+                logger.info("交易参考已同步到 Obsidian Vault")
             except Exception as e:
-                logger.warning("Obsidian 同步失败（不影响报告生成）: %s", e)
-
-            # 同步交易参考报告到 Obsidian
-            if trading_html_path:
-                try:
-                    _sync_report_to_obsidian(trading_html_path, report_date, time_slot)
-                    logger.info("交易参考已同步到 Obsidian Vault")
-                except Exception as e:
-                    logger.warning("交易参考 Obsidian 同步失败: %s", e)
+                logger.warning("交易参考 Obsidian 同步失败: %s", e)
 
     print()
 
@@ -842,10 +814,11 @@ def main(force: bool = False, dry_run: bool = False, morning: bool = False) -> b
     if not dry_run:
         logger.info("=" * 40)
         logger.info("Telegram 推送...")
-        # 附加 GitHub 报告链接
-        report_filename = f"report_{report_date}_{time_slot}.html"
-        github_url = f"https://stranger971020.github.io/trend-trading-system/reports/{report_filename}"
-        report_text_with_link = report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
+        # 附加 GitHub 报告链接（仅当 report_text 非空时生成，A股日报废弃后可能为 None）
+        if report_text:
+            report_filename = f"report_{report_date}_{time_slot}.html"
+            github_url = f"https://stranger971020.github.io/trend-trading-system/reports/{report_filename}"
+            report_text_with_link = report_text + f"\n\n📄 <a href='{github_url}'>GitHub 完整报告</a>"
 
         # 新版交易参考报告（唯一推送）
         try:

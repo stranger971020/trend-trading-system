@@ -23,6 +23,103 @@ MAX_WARN_SHOW = 4
 MAX_WEAK_SHOW = 4
 
 
+# ── 信号一致性评分 ──
+
+_CONSENSUS_LABELS = {
+    6: "🚀 一致偏多", 5: "🚀 一致偏多",
+    4: "✅ 偏多", 3: "✅ 偏多",
+    2: "📈 略偏多", 1: "📈 略偏多",
+    0: "➡️ 中性",
+    -1: "📉 略偏空", -2: "📉 略偏空",
+    -3: "⚠️ 偏空", -4: "⚠️ 偏空",
+    -5: "🔴 一致偏空", -6: "🔴 一致偏空", -7: "🔴 一致偏空",
+}
+
+
+def compute_signal_consensus(ra: dict, regime_result: dict, l2_tech_result: dict) -> tuple:
+    """
+    计算多模块信号一致性指数 [-7, +7].
+
+    Returns:
+        (score, label, adx_info) where:
+          - score: -7~+7
+          - label: 中文标签
+          - adx_info: "ADX 34.6 · 强趋势" 或 None
+    """
+    score = 0
+
+    # 1) risk_assessment 信号
+    if ra:
+        al = ra.get("alert_level")
+        if al == "danger":
+            score -= 3
+        elif al == "warning":
+            score -= 2
+        elif al == "caution":
+            score -= 1
+
+    # 2) 市场状态
+    adx_info = None
+    if regime_result:
+        rv2 = regime_result.get("regime_v2", "")
+        if rv2 == "bear":
+            score -= 2
+        elif rv2 in ("range_down", "pullback"):
+            score -= 1
+        elif rv2 == "rebound":
+            score += 1
+        elif rv2 in ("early_bull", "bull"):
+            score += 2
+
+        # ADX 趋势可靠性
+        adx = regime_result.get("adx")
+        if adx is not None:
+            if adx > 30:
+                adx_info = f"ADX {adx:.0f} · 强趋势"
+            elif adx > 20:
+                adx_info = f"ADX {adx:.0f} · 中趋势"
+            else:
+                adx_info = f"ADX {adx:.0f} · 弱趋势"
+
+    # 3) 板块广度（追涨 vs 弱势区比例）
+    zones = (l2_tech_result or {}).get("zones", {})
+    chase = zones.get("chase", [])
+    weak = zones.get("weak", [])
+    total = (len(chase) + len(zones.get("watch", []))
+             + len(zones.get("top_warn", [])) + len(weak))
+    if total > 0:
+        bull_ratio = len(chase) / total
+        bear_ratio = len(weak) / total
+        breadth_score = round((bull_ratio - bear_ratio) * 4)
+        score = max(-7, min(7, score + breadth_score // 2))
+
+    label = _CONSENSUS_LABELS.get(max(-7, min(7, score)), "➡️ 中性")
+    return score, label, adx_info
+
+# ── 支撑/阻力测试概率估算（基于布林带波动率） ──
+_PROB_MAP = {0: "极低", 1: "低", 2: "中", 3: "高", 4: "极高"}
+def estimate_level_probability(
+    current_price, level_price, boll_upper, boll_lower, boll_mid, direction="down"
+):
+    if not all([current_price, level_price, boll_upper, boll_lower, boll_mid]):
+        return "—"
+    if boll_mid <= 0:
+        return "—"
+    daily_vol = (boll_upper - boll_lower) / (boll_mid * 4)
+    if daily_vol <= 0:
+        return "—"
+    if direction == "down" and current_price > level_price:
+        dist_pct = (current_price - level_price) / current_price
+    elif direction == "up" and current_price < level_price:
+        dist_pct = (level_price - current_price) / current_price
+    else:
+        return "触及"
+    n = dist_pct / daily_vol
+    prob = 4 if n < 0.5 else 3 if n < 1.0 else 2 if n < 2.0 else 1 if n < 3.5 else 0
+    return _PROB_MAP[prob]
+
+
+
 
 # 舆情情绪标签 → 中文显示
 sent_label_map = {
@@ -136,6 +233,10 @@ def generate_daily_trading_report(
     key_levels_result: dict = None,
     risk_assessment: dict = None,
     news_overlay: dict = None,
+    module_status: dict = None,
+    backtest_summary: dict = None,
+    trend_change: dict = None,
+    market_dashboard: dict = None,
 ) -> str:
     now = _now_beijing()
     date_str = now.strftime("%Y-%m-%d")
@@ -148,13 +249,13 @@ def generate_daily_trading_report(
 
     # ── 仓位计算（市场脆弱度优先，追涨区数量次之） ──
     ccount = len(chase)
-    risk_note = ""
     ra = risk_assessment or {}
 
-    if ra.get("alert_level") in ("danger", "warning"):
+    alert_level = ra.get("alert_level", "normal") if ra else "normal"
+
+    if alert_level in ("danger", "warning", "caution"):
         pos = f"≤{ra['pos_cap']}%"
         pos_desc = ra.get("pos_desc_override", "减仓观望")
-        risk_note = ra.get("alert_label", "")
     else:
         # 正常市场：基于追涨区数量定仓位
         if ccount >= 8:
@@ -164,21 +265,25 @@ def generate_daily_trading_report(
         else:
             pos, pos_desc = "10-20%", "追涨板块少，轻仓试单"
 
-    # 市场状态
+    # 核心结论标题：直接使用 risk_assessment 的原始标签（无硬编码）
+    if alert_level in ("danger", "warning", "caution"):
+        risk_title = ra.get("alert_label", "⚠️ 市场偏弱")
+    else:
+        risk_title = "✅ 大盘无系统性风险"
+
+    # 市场状态（仅追加有用信息，跳过 "--" 占位参数）
     reg = ""
+    has_alert = alert_level in ("danger", "warning", "caution")
     if regime_result:
         rv2 = regime_result.get("regime_v2_label", "")
         rdesc = regime_result.get("regime_v2_desc", "")
         sp = regime_result.get("strategy_params", {})
         reg = f" | {rv2}"
-        if rdesc:
+        # 风险模块已提供仓位建议时，不追加 regime 的仓位指令（避免自相矛盾）
+        if not has_alert and rdesc:
             reg += f" {rdesc}"
-        if sp.get("n"):
+        if sp.get("n") and sp["n"] != "0只":
             reg += f" | 选{sp['n']}持{sp['hold']}"
-        if sp.get("sl"):
-            reg += f" 止{sp['sl']}%"
-        if sp.get("tp"):
-            reg += f" 盈{sp['tp']}%"
 
     # ── 数据日期（从 L2 技术指标结果中提取最新交易日） ──
     data_date = (l2_tech_result or {}).get("date", "")
@@ -191,26 +296,86 @@ def generate_daily_trading_report(
     lines.append(f"生成: {now.strftime('%H:%M')} CST")
     lines.append(data_date_str)
     lines.append("")
-    alert_level = ra.get("alert_level", "normal") if ra else "normal"
-    if alert_level == "danger":
-        risk_title = "⛔ 市场脆弱：高度谨慎"
-    elif alert_level == "warning":
-        risk_title = "⚠️ 市场偏弱：控制仓位"
-    elif alert_level == "caution":
-        risk_title = "📊 反弹乏力：不宜追高"
-    else:
-        risk_title = "✅ 大盘无系统性风险"
+    # 关键点位（R5 整合）在 risk_title + pos 已经就绪后直接构建 blockquote
     bq = f"<blockquote><b>{risk_title} | 建议仓位 {pos}</b>\n{pos_desc}{reg}"
-    if risk_note:
-        bq += f"\n⚠️ {risk_note}"
     # 关键点位（R5 整合）
     if key_levels_result and key_levels_result.get("success"):
         lvls = key_levels_result["levels"]
         st = key_levels_result["status"]
         bq += f"\n📊 支撑 {lvls['strong_support']} | 阻力 {lvls['resistance_mid']} · {st['status']} {st['action_cn']}"
+        close_px = lvls.get("close_price", 0)
+        prob_s = estimate_level_probability(
+            close_px, lvls["strong_support"],
+            lvls.get("boll_upper", 0), lvls.get("boll_lower", 0), lvls.get("boll_mid", 0),
+            direction="down")
+        prob_r = estimate_level_probability(
+            close_px, lvls["resistance_mid"],
+            lvls.get("boll_upper", 0), lvls.get("boll_lower", 0), lvls.get("boll_mid", 0),
+            direction="up")
+        bq += f"\n📊 支撑测试概率 {prob_s} | 阻力测试概率 {prob_r}"
     bq += "</blockquote>"
     lines.append(bq)
     lines.append("")
+
+    # ── 信号一致性 · 趋势强度 · 回测参考 ──
+    consensus_score, consensus_label, adx_info = compute_signal_consensus(
+        ra, regime_result, l2_tech_result
+    )
+    meta_parts = [consensus_label]
+    if adx_info:
+        meta_parts.append(adx_info)
+    # 回测参考
+    if backtest_summary and backtest_summary.get("positive_rate") is not None:
+        pr = backtest_summary["positive_rate"]
+        a3 = backtest_summary.get("avg_top3_return")
+        if a3 is not None:
+            meta_parts.append(f"回测胜率 {pr:.0f}% · Top3均 {a3:+.1f}%")
+        else:
+            meta_parts.append(f"回测胜率 {pr:.0f}%")
+    lines.append("📊 " + " | ".join(meta_parts))
+    # 态势变化
+    if trend_change:
+        trend_emoji = {"improving": "📈", "deteriorating": "📉", "stable": "➡️"}
+        emoji = trend_emoji.get(trend_change.get("overall", "stable"), "➡️")
+        parts = [f"{emoji} 较昨日: {trend_change.get('overall', '持平')}"]
+        for k in ("chase", "weak", "alert", "price"):
+            v = trend_change.get(k, "")
+            if v and v != "→":
+                labels = {"chase": "追涨", "weak": "弱势", "alert": "风险", "price": "指数"}
+                parts.append(f"{labels.get(k, k)}{v}")
+        lines.append("📊 " + " | ".join(parts))
+    lines.append("")
+
+    # ── 市场数据仪表盘（动态计算）──
+    if market_dashboard:
+        md = market_dashboard
+        lines.append("━" * 20)
+        lines.append("<b>📊 市场数据</b>")
+        lines.append("━" * 20)
+        # 多周期动量行
+        mom_parts = []
+        for d, label in [(5, "5日"), (20, "20日"), (60, "60日")]:
+            v = md.get(f"idx_{d}d")
+            if v is not None:
+                arrow = "🟢" if v > 0 else "🔴"
+                mom_parts.append(f"{label} {arrow} {v:+.1f}%")
+        if mom_parts:
+            lines.append(f"  指数: {md.get('idx_level', '?')}  |  {'  '.join(mom_parts)}")
+        # MA200
+        if md.get("ma200") is not None:
+            pos = "✅ 上方" if md.get("above_ma200") else "⚠️ 下方"
+            lines.append(f"  MA200: {md['ma200']:.0f} {pos}")
+        # 广度 + 个股
+        lines.append(f"  行业广度: {md.get('breadth_str', '?')} ({md.get('breadth_pct', '?')}%站上MA20)")
+        lines.append(f"  个股5日: {md.get('stock_5d_up_pct', '?')}%上涨")
+        # Top/Bottom 行业
+        top = md.get("top_sectors", [])
+        bot = md.get("bot_sectors", [])
+        if top:
+            lines.append(f"  领涨: {' | '.join(f'{n} {v:+.1f}%' for n, v in top)}")
+        if bot:
+            lines.append(f"  领跌: {' | '.join(f'{n} {v:+.1f}%' for n, v in bot)}")
+        lines.append("")
 
     # 市场情绪仪表盘 + 策略建议
     if sentiment_result and sentiment_result.get("indicators"):
@@ -224,11 +389,11 @@ def generate_daily_trading_report(
                 parts.append(f"{ind['label']} {ind['value']} ({pct}%分位 {ind.get('signal', '')})")
                 if key == 'leverage' and pct is not None:
                     if pct < 5:
-                        tips.append("  融资出清极端低位 → 关注反弹机会，非进一步减仓")
+                        tips.append("  融资余额极端低位 → 出清尾声信号，等待回升确认")
                     elif pct < 20:
-                        tips.append("  融资萎缩 → 配合warning确认但不足以上升到danger")
+                        tips.append("  融资余额偏低 → 资金面偏弱，配合其他信号判断方向")
                     elif pct > 80:
-                        tips.append("  杠杆偏高 → warning假信号概率高，可少减仓位")
+                        tips.append("  融资余额偏高 → 市场过热信号，注意回调风险")
         if parts:
             lines.append("📊 市场情绪 · " + " | ".join(parts))
             for t in tips:
@@ -333,6 +498,53 @@ def generate_daily_trading_report(
         lines.append("  当前无符合条件的个股")
         lines.append("")
 
+    # ═══════════════════════ ML 评分止损 Top 5 ═══════════════════════
+    lines.append("━" * 20)
+    lines.append("<b>🤖 V4 ML 评分止损 · Top 5</b>")
+    lines.append("━" * 20)
+    lines.append("")
+    lines.append("<b>回测 (Walk-Forward, 175天, 含交易成本)</b>")
+    lines.append("  <code>策略              总收益    Sharpe  MaxDD</code>")
+    lines.append("  <code>评分+硬5%止损    +75.3%    2.95   -19.1%</code> ← ✅")
+    lines.append("  <code>评分+硬10%       +19.6%    1.10   -28.2%</code>")
+    lines.append("  <code>评分+硬15%        -2.0%    0.14   -34.5%</code>")
+    lines.append("  <code>评分止损only      -20.8%   -0.76   -43.6%</code>")
+    lines.append("")
+    lines.append("  策略: Top5买入 | 评分&lt;前3%→卖 | 亏&gt;5%→硬止损 | 最长20天")
+    lines.append(f"  209笔交易, 盈亏比2.70, 56%硬止损(-7.4%/笔), 8.6%满期(+17.2%/笔)")
+    lines.append("")
+
+    # ── ML Top 5 卡片 ──
+    ml_picks = l2_tech_result.get("ml_top5", []) if l2_tech_result else []
+    if ml_picks:
+        top_score = ml_picks[0].get("score", 0) if ml_picks else 0
+        if top_score <= 1.0:
+            lines.append("<b>🎯 ML 评分 Top 5</b> ℹ️ 中期弱势，模型未发现高胜率机会")
+            lines.append("  相对最优选 + 5%硬止损保护，仅作参考")
+        else:
+            lines.append("<b>🎯 ML 评分 Top 5 精选</b>")
+        lines.append("")
+        em = {1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣"}
+        for i, p in enumerate(ml_picks, 1):
+            e = em.get(i, f"{i}.")
+            code = p.get("ts_code", "?")
+            name = p.get("name", code)
+            score = p.get("score", 0)
+            px = p.get("close", p.get("price", 0))
+            sl = round(px * 0.95, 2) if px else 0
+            tp = round(px * 1.20, 2) if px else 0
+            lines.append(
+                f"  {e} <code>{code}</code> {name[:6]:<6} "
+                f"评分{score:.1f} 现价{px:.2f}"
+            )
+            lines.append(
+                f"     └ 止损{sl} (-5%) 目标{tp} (+20%)"
+            )
+        lines.append("")
+    else:
+        lines.append("  <i>ML Top 5 暂无数据（等待模型重训练）</i>")
+        lines.append("")
+
     # ═══════════════════════ 顶部预警 ═══════════════════════
     lines.append("━" * 20)
     lines.append("<b>⚠️ 顶部预警</b>")
@@ -359,23 +571,39 @@ def generate_daily_trading_report(
     lines.append("━" * 20)
     lines.append("")
     lines.append(f"  <b>仓位</b> {pos}　{pos_desc}")
-    if risk_note:
-        lines.append(f"  ⚠️ {risk_note}")
     lines.append("")
-    lines.append("  ① 持仓缩量回MA20 → 持有")
-    lines.append("  ② 放量跌破止损 → 离场")
-    lines.append("  ③ warning解除+行业≥70%上涨 → 一步回满")
-    lines.append("  ④ 市场脆弱期间 → 半仓防御")
+    # 交易计划条目随风险等级动态调整（无硬编码）
+    plan_items = [
+        "① 持仓缩量回MA20 → 持有",
+        "② 放量跌破止损 → 离场",
+    ]
+    if alert_level == "danger":
+        plan_items.append(f"③ 极端风险期 → 不补仓不抄底，仓位 ≤{ra.get('pos_cap', 15)}%")
+    elif alert_level == "warning":
+        plan_items.append(f"③ 偏弱市场 → {pos}仓位防御，企稳后再考虑回补")
+    elif alert_level == "caution":
+        plan_items.append(f"③ 先行信号期 → {pos}仓位，等待数据确认方向")
+    else:
+        plan_items.append("③ 不追高，耐心等待回调入场")
+    for item in plan_items:
+        lines.append(f"  {item}")
     lines.append("")
     lines.append("  <b>每笔亏损 ≤ 总资金 1%</b>")
     lines.append("")
-    # 回补信号
-    if ra.get("re_entry_signal"):
-        lines.append("  📈 回补信号: 行业≥70%上涨 → 可一步回满仓位")
-        lines.append("")
     # 融资余额提醒（始终显示）
-    lines.append("  ⚠️ 融资余额连续3日下降>1% → 去杠杆风险，提前减仓")
+    lines.append("  ⚠️ 融资余额连续3日下降&gt;1% → 去杠杆风险，提前减仓")
     lines.append("")
+    # 数据源健康度
+    if module_status:
+        healthy = sum(1 for v in module_status.values() if v == "success")
+        total = max(len(module_status), 1)
+        flagged = [k for k, v in module_status.items() if v not in ("success", "N/A", "skipped")]
+        if flagged:
+            flagged_str = ", ".join(flagged[:3])
+            lines.append(f"⚠️ 数据源: {healthy}/{total} 正常 | 异常: {flagged_str}")
+        else:
+            lines.append(f"✅ 数据源: {healthy}/{total} 全部正常")
+        lines.append("")
     lines.append("━" * 20)
     lines.append("⚠️ 技术指标参考，不构成投资建议")
     lines.append("📖 策略说明: https://stranger971020.github.io/trend-trading-system/reports/trading_report_guide.html")
@@ -551,6 +779,11 @@ def generate_daily_trading_html(
     risk_assessment: dict = None,
     sentiment_result: dict = None,
     news_overlay: dict = None,
+    module_status: dict = None,
+    backtest_summary: dict = None,
+    trend_change: dict = None,
+    key_levels_result: dict = None,
+    market_dashboard: dict = None,
 ) -> str:
     """生成完整的可视化 HTML 报告（替代纯文本包装）"""
     now = datetime.now(timezone(timedelta(hours=8)))
@@ -571,12 +804,11 @@ def generate_daily_trading_html(
     # ── 仓位计算（市场脆弱度优先） ──
     ccount = len(chase)
     wcount = len(top_warn)
-    risk_note = ""
+    alert_level = ra.get("alert_level", "normal") if ra else "normal"
 
-    if ra.get("alert_level") in ("danger", "warning"):
+    if alert_level in ("danger", "warning", "caution"):
         pos = f"≤{ra['pos_cap']}%"
         pos_desc = ra.get("pos_desc_override", "减仓观望")
-        risk_note = ra.get("alert_label", "")
     else:
         if ccount >= 8:
             pos, pos_desc = "40-50%", "追涨板块充足，中等仓位"
@@ -585,29 +817,26 @@ def generate_daily_trading_html(
         else:
             pos, pos_desc = "10-20%", "追涨板块少，轻仓试单"
 
-    alert_level = ra.get("alert_level", "normal") if ra else "normal"
-    if alert_level == "danger":
-        risk_title = "⛔ 市场脆弱：高度谨慎"
-    elif alert_level == "warning":
-        risk_title = "⚠️ 市场偏弱：控制仓位"
-    elif alert_level == "caution":
-        risk_title = "📊 反弹乏力：不宜追高"
+    # 核心结论标题：直接使用 risk_assessment 的原始标签（无硬编码）
+    if alert_level in ("danger", "warning", "caution"):
+        risk_title = ra.get("alert_label", "⚠️ 市场偏弱")
     else:
         risk_title = "✅ 大盘无系统性风险"
 
-    # ── 市场状态 ──
+    # ── 市场状态（仅追加有用信息，跳过 "--" 占位参数） ──
     reg = ""
+    has_alert = alert_level in ("danger", "warning", "caution")
     if regime_result:
         rv2 = regime_result.get("regime_v2_label", "")
         rdesc = regime_result.get("regime_v2_desc", "")
         sp = regime_result.get("strategy_params", {})
-        reg = f" | {rv2} {rdesc}" if rdesc else f" | {rv2}"
-        if sp.get("n"):
+        # 风险模块已提供仓位建议时，不追加 regime 的仓位指令（避免自相矛盾）
+        if rdesc and not has_alert:
+            reg = f" | {rv2} {rdesc}"
+        else:
+            reg = f" | {rv2}"
+        if sp.get("n") and sp["n"] != "0只":
             reg += f" | 选{sp['n']}持{sp['hold']}"
-        if sp.get("sl"):
-            reg += f" 止{sp['sl']}%"
-        if sp.get("tp"):
-            reg += f" 盈{sp['tp']}%"
 
     # ═══════════════════════════ 构建页面 ═══════════════════════════
     body = []
@@ -617,9 +846,56 @@ def generate_daily_trading_html(
         f'<div class="conclusion">'
         f'<div class="conclusion-title">{risk_title} · 建议仓位 <b>{pos}</b></div>'
         f'<div class="conclusion-sub">{pos_desc}{_html.escape(reg)}</div>'
-        + (f'<div class="conclusion-warn">{risk_note}</div>' if risk_note else "")
         + "</div>"
     )
+
+    # ── 信号一致性 · 趋势强度 · 回测参考 ──
+    cs_score, cs_label, adx_info = compute_signal_consensus(
+        ra, regime_result, l2_tech_result
+    )
+    meta_tags = [f'<span class="tag tag-{"red" if cs_score <= -3 else "orange" if cs_score < 0 else "green" if cs_score > 0 else "gray"}">{_html.escape(cs_label)}</span>']
+    if adx_info:
+        meta_tags.append(f'<span class="tag tag-gray">{_html.escape(adx_info)}</span>')
+    if backtest_summary and backtest_summary.get("positive_rate") is not None:
+        pr = backtest_summary["positive_rate"]
+        a3 = backtest_summary.get("avg_top3_return")
+        if a3 is not None:
+            meta_tags.append(f'<span class="tag tag-green">回测胜率 {pr:.0f}% · Top3均 {a3:+.1f}%</span>')
+        else:
+            meta_tags.append(f'<span class="tag tag-green">回测胜率 {pr:.0f}%</span>')
+    body.append(f'<div class="section" style="padding:10px 20px;font-size:.82rem">{" ".join(meta_tags)}</div>')
+
+    # ── 关键点位 · 支撑/阻力概率 · 态势变化 ──
+    kl_tags = []
+    if key_levels_result and key_levels_result.get("success"):
+        lvls = key_levels_result["levels"]
+        st = key_levels_result["status"]
+        kl_tags.append(f'<span class="tag tag-gray">支撑 {lvls["strong_support"]}</span>')
+        kl_tags.append(f'<span class="tag tag-gray">阻力 {lvls["resistance_mid"]}</span>')
+        close_px = lvls.get("close_price", 0)
+        prob_s = estimate_level_probability(
+            close_px, lvls["strong_support"],
+            lvls.get("boll_upper", 0), lvls.get("boll_lower", 0), lvls.get("boll_mid", 0),
+            direction="down")
+        prob_r = estimate_level_probability(
+            close_px, lvls["resistance_mid"],
+            lvls.get("boll_upper", 0), lvls.get("boll_lower", 0), lvls.get("boll_mid", 0),
+            direction="up")
+        kl_tags.append(f'<span class="tag tag-{"green" if prob_s in ("高","极高") else "orange" if prob_s == "中" else "gray"}">支撑概率 {prob_s}</span>')
+        kl_tags.append(f'<span class="tag tag-{"green" if prob_r in ("高","极高") else "orange" if prob_r == "中" else "gray"}">阻力概率 {prob_r}</span>')
+    if trend_change:
+        te = {"improving": "📈", "deteriorating": "📉", "stable": "➡️"}
+        emoji = te.get(trend_change.get("overall", "stable"), "➡️")
+        trend_text = f"{emoji} {trend_change.get('overall', '持平')}"
+        tc = trend_change
+        for k in ("chase", "weak", "alert", "price"):
+            v = tc.get(k, "")
+            if v and v != "→":
+                labels = {"chase": "追涨", "weak": "弱势", "alert": "风险", "price": "指数"}
+                trend_text += f" {labels.get(k, k)}{v}"
+        kl_tags.append(f'<span class="tag tag-gray">{_html.escape(trend_text)}</span>')
+    if kl_tags:
+        body.append(f'<div class="section" style="padding:10px 20px;font-size:.82rem">{" ".join(kl_tags)}</div>')
 
     # ── 市场情绪仪表盘 ──
     if sentiment_result and sentiment_result.get("indicators"):
@@ -631,7 +907,7 @@ def generate_daily_trading_html(
                 sent_parts.append(
                     f'<span style="color:#6366f1">{ind["label"]}</span> '
                     f'{ind["value"]} '
-                    f'<span style="color:{('#dc2626' if ind.get('pct', 50) >= 80 else '#16a34a')}">'
+                    f'<span style="color:{"#dc2626" if ind.get("pct", 50) >= 80 else "#16a34a"}">'
                     f'({ind.get("pct", "")}%分位 {ind.get("signal", "")})</span>'
                 )
         if sent_parts:
@@ -644,11 +920,11 @@ def generate_daily_trading_html(
                     pct = ind.get('pct', 50)
                     if pct is not None:
                         if pct < 5:
-                            body.append(f'<div style="color:#16a34a;margin-top:6px">✅ 融资出清极端低位 → 关注反弹机会，非进一步减仓</div>')
+                            body.append(f'<div style="color:#16a34a;margin-top:6px">✅ 融资余额极端低位 → 出清尾声信号，等待回升确认</div>')
                         elif pct < 20:
-                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 融资萎缩 → 配合warning确认但不足以上升到danger</div>')
+                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 融资余额偏低 → 资金面偏弱，配合其他信号判断方向</div>')
                         elif pct > 80:
-                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 杠杆偏高 → warning假信号概率高，可少减仓位</div>')
+                            body.append(f'<div style="color:#dc2626;margin-top:6px">⚠️ 融资余额偏高 → 市场过热信号，注意回调风险</div>')
             body.append(f'</div>')
 
     # ── 舆情监控 ──
@@ -665,6 +941,41 @@ def generate_daily_trading_html(
                 color = "#dc2626" if ns.get("sentiment_level") in ("negative","panic") else "#6366f1"
                 body.append(f'<div style="color:{color};margin-top:4px">{ov["suggestion"]}</div>')
             body.append(f'</div>')
+
+    # ── 市场数据仪表盘 ──
+    md = market_dashboard or {}
+    if md:
+        parts = []
+        for d, label in [(5, "5日"), (20, "20日"), (60, "60日")]:
+            v = md.get(f"idx_{d}d")
+            if v is not None:
+                arrow = "🟢" if v > 0 else "🔴"
+                parts.append(f'{label} {arrow} {v:+.1f}%')
+        ma200_str = ""
+        if md.get("ma200") is not None:
+            pos = "上方 ✅" if md.get("above_ma200") else "下方 ⚠️"
+            ma200_str = f" | MA200 {md['ma200']:.0f} {pos}"
+        top_str = " | ".join(f"{n} {v:+.1f}%" for n, v in md.get("top_sectors", [])[:3])
+        bot_str = " | ".join(f"{n} {v:+.1f}%" for n, v in md.get("bot_sectors", [])[:3])
+        body.append(
+            '<div class="section"><div class="section-title">📊 市场数据</div>'
+            f'<div class="dashboard-row">'
+            f'<span>指数 {md.get("idx_level", "?")}</span>'
+            f'<span>{"  ".join(parts)}</span>'
+            f'<span>{ma200_str}</span>'
+            f'</div>'
+            f'<div class="dashboard-row">'
+            f'<span>广度 {md.get("breadth_str", "?")} ({md.get("breadth_pct", "?")}%站上MA20)</span>'
+            f'<span>个股5日 {md.get("stock_5d_up_pct", "?")}%上涨</span>'
+            f'</div>'
+            f'<div class="dashboard-row" style="font-size:.78rem;color:#475569">'
+            f'🟢 领涨: {top_str if top_str else "—"}'
+            f'</div>'
+            f'<div class="dashboard-row" style="font-size:.78rem;color:#475569">'
+            f'🔴 领跌: {bot_str if bot_str else "—"}'
+            f'</div>'
+            f'</div>'
+        )
 
     # ── 板块扫描 ──
     body.append('<div class="section"><div class="section-title">📊 板块扫描</div>')
@@ -728,6 +1039,45 @@ def generate_daily_trading_html(
             body.append("</div>")
         body.append("</div>")
 
+    # ── ML 评分止损 Top 5 ──
+    ml_picks = (l2_tech_result or {}).get("ml_top5", [])
+    if ml_picks:
+        top_score = ml_picks[0].get("score", 0) if ml_picks else 0
+        weak_label = '<span style="color:#dc2626;font-size:.85rem"> ⚠️ 市场偏弱</span>' if top_score <= 1.0 else ""
+        body.append(f'<div class="section"><div class="section-title">🤖 V4 ML 评分止损 · Top 5{weak_label}</div>')
+        body.append('<div class="ml-backtest-box">'
+            '<b>Walk-Forward 回测 (175天, 含交易成本)</b><br>'
+            '<code>评分+硬5%止损    +75.3%    MaxDD -19.1%    Sharpe 2.95</code> ← ✅ 最优<br>'
+            '<code>评分+硬10%       +19.6%    MaxDD -28.2%    Sharpe 1.10</code><br>'
+            '<code>评分+硬15%        -2.0%    MaxDD -34.5%    Sharpe 0.14</code><br>'
+            '<code>评分止损only      -20.8%   MaxDD -43.6%    Sharpe -0.76</code><br>'
+            '<br><b>策略:</b> 每日ML Top5买入 | 评分<前3%→卖 | 亏>5%→硬止损 | 最长20天<br>'
+            f'209笔交易 · 盈亏比2.70 · 56%硬止损(-7.4%/笔) · 8.6%满期(+17.2%/笔)'
+            '</div>')
+        if top_score <= 1.0:
+            body.append('<div style="color:#dc2626;font-size:.82rem;margin-bottom:8px">'
+                       'ML 模型（20日前向预测）：中期弱势下未发现高胜率机会。以下相对最优选 + 5%硬止损，仅作参考。短期5日反弹中（60%个股正收益），注意节奏。</div>')
+        body.append('<div class="ml-picks">')
+        em = {1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣"}
+        for i, p in enumerate(ml_picks, 1):
+            e = em.get(i, f"{i}.")
+            code = _html.escape(p.get("ts_code", "?"))
+            name = _html.escape(p.get("name", code)[:6])
+            ml = p.get("ml_score", 0)
+            score = p.get("score", 0)
+            px = p.get("close", p.get("price", 0))
+            sl = round(px * 0.95, 2) if px else 0
+            tp = round(px * 1.20, 2) if px else 0
+            body.append(
+                f'<div class="ml-card">'
+                f'{e} <code>{code}</code> {name} '
+                f'评分{score:.1f} 现价{px:.2f}'
+                f'<br><span style="color:#666;font-size:0.9rem">'
+                f'止损{sl} (-5%) · 目标{tp} (+20%)'
+                f'</span></div>'
+            )
+        body.append("</div></div>")
+
     # ── 顶部预警 ──
     if top_warn:
         body.append('<div class="section"><div class="section-title">⚠️ 顶部预警</div>')
@@ -743,29 +1093,45 @@ def generate_daily_trading_html(
     # ── 交易计划 ──
     body.append('<div class="section"><div class="section-title">📋 今日交易计划</div>')
     body.append(f'<div class="plan-item"><b>仓位</b> {pos}　{pos_desc}</div>')
-    if risk_note:
-        body.append(f'<div class="plan-item">{risk_note}</div>')
-    body.append(
-        '<div class="plan-list">'
-        "① 持仓缩量回MA20 → 持有<br>"
-        "② 放量跌破止损 → 离场<br>"
-        "③ warning解除+行业≥70%上涨 → 一步回满<br>"
-        "④ 市场脆弱期间 → 半仓防御"
-        "</div>"
-    )
+    # 交易计划条目随风险等级动态调整（无硬编码）
+    plan_items = [
+        "① 持仓缩量回MA20 → 持有",
+        "② 放量跌破止损 → 离场",
+    ]
+    if alert_level == "danger":
+        plan_items.append(f"③ 极端风险期 → 不补仓不抄底，仓位 ≤{ra.get('pos_cap', 15)}%")
+    elif alert_level == "warning":
+        plan_items.append(f"③ 偏弱市场 → {pos}仓位防御，企稳后再考虑回补")
+    elif alert_level == "caution":
+        plan_items.append(f"③ 先行信号期 → {pos}仓位，等待数据确认方向")
+    else:
+        plan_items.append("③ 不追高，耐心等待回调入场")
+    plan_html = "<br>".join(plan_items)
+    body.append(f'<div class="plan-list">{plan_html}</div>')
     body.append('<div class="plan-item"><b>每笔亏损 ≤ 总资金 1%</b></div>')
-    if ra.get("re_entry_signal"):
-        body.append(
-            f'<div class="plan-item" style="color:#16a34a;font-size:.82rem;margin-top:6px">'
-            f'📈 回补信号: 行业≥70%上涨 → 可一步回满仓位'
-            f'</div>'
-        )
     body.append(
         f'<div class="plan-item" style="color:#dc2626;font-size:.82rem;margin-top:6px">'
         f'⚠️ 融资余额连续3日下降>1% → 去杠杆风险，提前减仓'
         f'</div>'
     )
     body.append("</div>")
+
+    # ── 数据源健康度 ──
+    if module_status:
+        healthy = sum(1 for v in module_status.values() if v == "success")
+        total = max(len(module_status), 1)
+        flagged = [k for k, v in module_status.items() if v not in ("success", "N/A", "skipped")]
+        if flagged:
+            flagged_str = ", ".join(flagged[:3])
+            body.append(
+                f'<div style="font-size:.75rem;color:#94a3b8;text-align:center;padding:8px 0">'
+                f'⚠️ 数据源: {healthy}/{total} 正常 | 异常: {_html.escape(flagged_str)}</div>'
+            )
+        else:
+            body.append(
+                f'<div style="font-size:.75rem;color:#94a3b8;text-align:center;padding:8px 0">'
+                f'✅ 数据源: {healthy}/{total} 全部正常</div>'
+            )
 
     content = "\n".join(body)
 
@@ -833,6 +1199,17 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
 .sector-block:last-child{{margin-bottom:0}}
 .sector-title{{font-size:.95rem;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0}}
 .sector-title .score-badge{{display:inline-block;padding:1px 10px;border-radius:10px;background:#eef2ff;color:#4f46e5;font-size:.78rem;margin-left:6px;vertical-align:middle}}
+
+/* ── ML 评分止损区块 ── */
+.ml-backtest-box{{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:.82rem;line-height:1.6}}
+.ml-backtest-box code{{font-size:.75rem;color:#166534}}
+.ml-card{{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:.85rem}}
+.ml-card:last-child{{margin-bottom:0}}
+.ml-card code{{font-size:.78rem;color:#4f46e5}}
+
+/* ── 市场数据仪表盘 ── */
+.dashboard-row{{font-size:.84rem;line-height:1.7;padding:2px 0}}
+.dashboard-row span{{margin-right:12px}}
 
 .stock-card{{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;margin-bottom:8px}}
 .stock-card:last-child{{margin-bottom:0}}
