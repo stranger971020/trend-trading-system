@@ -1,0 +1,85 @@
+# ============================================================
+# 《每日交易参考》v4 - 宏观情绪监测模块配置
+# 所有阈值外部注入，不硬编码
+# ============================================================
+# 使用方法：
+#   tracker = MacroPullbackTracker(config_path="macro_config_default.yaml")
+# 或
+#   python macro_pullback_tracker.py --config macro_config_default.yaml
+# ============================================================
+
+macro_pullback_tracker:
+  # ── 标的指数 ──
+  indices:
+    csi300: "000300.SH"
+    csi500: "000905.SH"
+    etf_csi300: "510300.SH"   # 华泰柏瑞沪深300ETF
+    etf_csi500: "510500.SH"   # 南方中证500ETF
+
+  # ── RSI 深度阈值 ──
+  rsi:
+    period: 14
+    oversold: 25               # 超卖阈值 (RSI < 25)
+    extreme_oversold: 18       # 极端超卖 (RSI < 18) — v4修正: 15→18, 原阈值9.7年触发0次
+    overbought: 75             # 超买阈值 (RSI > 75)
+    extreme_overbought: 85     # 极端超买 (RSI > 85)
+
+  # ── ATR 波动率极值 ──
+  atr:
+    period: 14
+    vol_breakout_multiplier: 2.0      # ATR 突破倍数 — v4修正: 2.5→2.0, 原阈值9.7年触发0次
+    vol_breakout_lookback: 20         # ATR 均值回看窗口（交易日）
+
+  # ── 均线乖离率 ──
+  ma_deviation:
+    fast_period: 5
+    mid_period: 20
+    slow_period: 60
+    # 极值阈值 (乖离率低于此值视为极值)
+    extreme_deviation_pct:
+      ma5: -3.0      # 跌破MA5超过3%
+      ma20: -5.0     # 跌破MA20超过5%
+      ma60: -8.0     # 跌破MA60超过8%
+    # 历史事件检测用宽松阈值
+    event_deviation_pct:
+      ma5: -2.0
+      ma20: -4.0
+      ma60: -6.0
+
+  # ── 成交量偏离度 ──
+  volume_deviation:
+    period: 20
+    panic_surge_ratio: 2.0    # 恐慌放量 >= 均量2倍
+    shrink_ratio: 0.6         # 地量萎缩 <= 均量60% — v4修正: 0.4→0.6, 原阈值9.7年触发0次
+
+  # ── 历史形态映射 ──
+  historical_pattern:
+    lookback_years: 10
+    min_event_distance_days: 15
+    max_drawdown_threshold: -3.0         # 单日跌幅 > 3%
+    consecutive_drawdown_days: 3
+    total_drawdown_threshold: -5.0       # 累计跌幅 > 5%
+    recovery_check_days: 250
+
+  # ── 微观信号 ──
+  micro_signals:
+    etf:
+      premium_threshold: 0.5             # ETF溢价 > 0.5%
+      share_increase_pct: 10.0           # 份额增长 > 10%
+    long_lower_shadow:
+      body_to_shadow_max_ratio: 0.5      # 实体 / 下影线 < 0.5
+      shadow_to_total_min_ratio: 0.3     # 下影线 / 全波幅 > 0.3
+    margin:
+      lookback_days: 120
+      extreme_percentile: 10             # <10%分位
+      drop_days: 3
+      drop_threshold: -0.5               # 单日降幅 > 0.5%
+
+  # ── 综合置信度权重 ──
+  confidence_weights:
+    rsi_extreme: 0.25
+    atr_breakout: 0.15
+    ma_deviation: 0.20
+    volume_deviation: 0.10
+    historical_pattern: 0.20
+    micro_signals: 0.10
