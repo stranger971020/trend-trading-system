@@ -332,15 +332,22 @@ check_freshness()  → 检查 stock_daily / feature_matrix / models 新鲜度
 
 **运行流程** (--report-only):
 ```
-check_freshness()  → 报告当前数据新鲜度状态
+check_freshness()  → 报告当前数据新鲜度状态（Tushare trade_cal 精确日历，含节假日）
+    │
+    ├── 数据滞后?（stock_daily / feature 任一滞后 >0 交易日）
+    │      → 统一自愈: refresh_stock_daily() + refresh_features() → 重查
+    │        （自愈 ~20-25 分钟，报告可能推迟到 ~08:55，可接受）
+    │      → 自愈仍失败 → 传 --stale-days N 给 v6_daily_report.py 打滞后横幅
     │
     └── 调用 v6_daily_report.py --asof <stock_daily最新日期>
         ├── compute_temperature()    (P1)
         ├── compute_decay_ranking()  (P2)
-        ├── generate_html()          → reports/v6_daily/
+        ├── generate_html()          → reports/v6_daily/（顶部数据滞后横幅 + danger 红条）
         ├── send_telegram()          → Telegram Bot API
         └── git_deploy()             → GitHub Pages
 ```
+
+> **统一自愈机制** (2026-08-03): 报告生成前若 stock_daily/特征矩阵滞后，管道自动补拉数据再出报告，杜绝"能跑≠数据健康"的静默错数据。若自愈本身失败（如 Tushare 不可用），报告照常生成但顶部显示"⚠️ 数据滞后 N 天"横幅——消费端自证。
 
 ### 8.2 Cron 配置
 
