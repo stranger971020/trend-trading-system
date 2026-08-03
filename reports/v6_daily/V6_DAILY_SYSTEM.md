@@ -373,12 +373,19 @@ crontab -e
 
 ### 9.1 HTML 结构
 
-日报 HTML 包含 5 个卡片区域:
+日报 HTML 顶部为 **⚠️ 脆弱度 danger 警示条**（独立红色条，仅 danger 触发时显示；非 danger 或数据不可用时该区域为空，页面与旧版一致），下方为 5 个卡片区域:
 1. **核心结论**: 温度、仓位建议、历史胜率（左侧色条，醒目）
 2. **温度计**: 大号数字 + 渐变色条 + Gate 详情 + 解读
 3. **衰减榜**: 双栏（🔴 TOP10 + 🟢 TOP10）+ 行业排名 + 搜索框
 4. **仓位规则**: 完整规则表（当前行高亮）+ 反直觉警示
 5. **交易策略**: 三步使用流程 + 当日具体建议
+
+**脆弱度 danger 警示条说明** (2026-08-03 接入):
+- 数据源: `analysis/risk_assessment.py` 的 `compute_from_db()`，与 `run_analysis.py` 晨间流程**同源**，读 `sw_index_data.db`（`sw_l2_index_daily` 行业广度 + `stock_daily` 微盘）+ Tushare，完全自包含。
+- 判定: `alert_level == "danger"` 时展示。历史精确率 **84.6%**（`backtest_early_warning.py` 回测口径，5 年）。
+- **仅展示不联动**: 警示条只宣告风险与「脆弱度规则建议 ≤15% 仓位（优先于 P3）」，**不改变** P3 仓位规则表及其输出。P3 为 98-fold 历史查表，二者独立。
+- 失败降级: `compute_from_db` 抛异常或返回非 danger → 警示条为空，**不影响日报生成**（try/except 包裹）。
+- 已知限制: 按当前时点计算（内部用 `datetime.now()`）；手动以历史 `--asof` 生成旧报告时，警示条反映当下而非 asof 日。生产 cron（T+1 08:30）数据基准确认与 report_date 一致。
 
 ### 9.2 CSS 规范
 
@@ -390,8 +397,10 @@ crontab -e
 
 ### 9.3 Telegram 格式
 
-Telegram 推送为 HTML 格式（`parse_mode="HTML"`），控制在 300 字符以内：
+Telegram 推送为 HTML 格式（`parse_mode="HTML"`），控制在 300 字符以内。**danger 触发时首行插入**：
 ```
+⚠️ <b>市场脆弱度 DANGER</b> · {label} · 建议 ≤15% 仓位（优先于 P3）
+
 📊 V6日报 {date} {weekday} → {next_date} {next_weekday}
 
 🌡️ 温度 {temp}/100 {level} | 推断 Regime: {regime}
