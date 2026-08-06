@@ -23,6 +23,7 @@ v6_daily_report.py — V6 每日交易日报
 #               下游: v6_daily_pipeline.py --report-only 自愈失败时传参
 #               健康检查 FILE_GROUPS 已补 v6_daily_report.py
 # 2026-08-05 Claude: 衰减榜标题下插入
+# 2026-08-06 Claude: 上升榜加确定性过滤(当前分位≥75且上升) — 变化=赔率, 分位=确定性, 两者兼备才上榜
 # 2026-08-06 Claude: 行业衰减榜改 L2（无L2回退L1），改为 衰减TOP10/上升TOP10 双榜
 # 2026-08-06 Claude: Telegram 消息加 PWin 摘要（最衰减/最上升 股票 PWin前→今）
 # 2026-08-06 Claude: 榜单/搜索表加回 PWin(前)/PWin(今) 列（用户要求，与分位/变化并列展示）
@@ -431,11 +432,17 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
             color = '#dc2626' if dc < -10 else ('#f59e0b' if dc < 0 else '#16a34a')
             top_rows += f"<tr><td>{i}</td><td style='font-size:.8rem'>{idx}</td><td style='font-size:.78rem;color:#64748b'>{row.get('name','')}</td><td style='font-size:.78rem;color:#64748b'>{row['l1_name']}</td><td style='font-size:.76rem'>{row['pwin_past']:.3f}</td><td style='font-size:.76rem'>{row['pwin_today']:.3f}</td><td style='color:{color};font-weight:600'>{dc:+.1f}pp</td></tr>"
 
-        rise_rows = ""
-        for i, (idx, row) in enumerate(ranking.tail(10)[::-1].iterrows(), 1):
-            dc = row['decay_pct']
-            color = '#dc2626' if dc < -10 else ('#f59e0b' if dc < 0 else '#16a34a')
-            rise_rows += f"<tr><td>{i}</td><td style='font-size:.8rem'>{idx}</td><td style='font-size:.78rem;color:#64748b'>{row.get('name','')}</td><td style='font-size:.78rem;color:#64748b'>{row['l1_name']}</td><td style='font-size:.76rem'>{row['pwin_past']:.3f}</td><td style='font-size:.76rem'>{row['pwin_today']:.3f}</td><td style='color:{color};font-weight:600'>{dc:+.1f}pp</td></tr>"
+        # 上升榜(2026-08-06): 确定性过滤 — 只显示 当前分位≥75 且 上升(变化>0) 的股票，按变化排
+        # 理由: 变化代表赔率(未定价改善), 当前分位代表确定性; 两者都要才是有投资价值的上升标的
+        rise_pool = ranking[(ranking["rank_pct_today"] >= 75) & (ranking["decay_pct"] > 0)]
+        if rise_pool.empty:
+            rise_rows = "<tr><td colspan='7' style='color:#94a3b8;text-align:center'>无高分位(≥75)上升标的 — 市场整体偏弱</td></tr>"
+        else:
+            rise_rows = ""
+            for i, (idx, row) in enumerate(rise_pool.tail(10)[::-1].iterrows(), 1):
+                dc = row['decay_pct']
+                color = '#dc2626' if dc < -10 else ('#f59e0b' if dc < 0 else '#16a34a')
+                rise_rows += f"<tr><td>{i}</td><td style='font-size:.8rem'>{idx}</td><td style='font-size:.78rem;color:#64748b'>{row.get('name','')}</td><td style='font-size:.78rem;color:#64748b'>{row['l1_name']}</td><td style='font-size:.76rem'>{row['pwin_past']:.3f}</td><td style='font-size:.76rem'>{row['pwin_today']:.3f}</td><td style='color:{color};font-weight:600'>{dc:+.1f}pp</td></tr>"
 
         # L2 行业双榜: 衰减 TOP10 + 逆势上升 TOP10（2026-08-06 用户要求）
         ind_down_rows = ""
@@ -491,7 +498,7 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
           </table>
         </div>
         <div>
-          <div style="font-weight:700;color:#16a34a;margin-bottom:8px">🟢 逆势上升 TOP 10</div>
+          <div style="font-weight:700;color:#16a34a;margin-bottom:8px">🟢 逆势上升 TOP 10（分位≥75 + 上升）</div>
           <table class="data-table">
             <tr><th>#</th><th>代码</th><th>名称</th><th>行业</th><th>PWin(前)</th><th>PWin(今)</th><th>变化(pp)</th></tr>
             {rise_rows}
@@ -725,14 +732,16 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
         best = list(ind_stats.tail(3).index)
         lines.append(f"📉 衰减板块: {' '.join(worst)}")
         lines.append(f"🟢 逆势板块: {' '.join(best)}")
-        # PWin 摘要（2026-08-06: 用户要求 Telegram 显示 P(Win) 值）
+        # PWin 摘要（2026-08-06: 用户要求 Telegram 显示 P(Win) 值；最上升与 HTML 榜同过滤: 分位≥75+上升）
         if ranking is not None and not ranking.empty:
             top_d = ranking.head(1).iloc[0]
-            top_r = ranking.tail(1).iloc[0]
             d_name = top_d.get("name", "") or top_d.name
-            r_name = top_r.get("name", "") or top_r.name
             lines.append(f"🔻 最衰减 {d_name}: PWin {top_d['pwin_past']:.3f}→{top_d['pwin_today']:.3f} ({top_d['decay_pct']:+.0f}pp)")
-            lines.append(f"🚀 最上升 {r_name}: PWin {top_r['pwin_past']:.3f}→{top_r['pwin_today']:.3f} ({top_r['decay_pct']:+.0f}pp)")
+            rise_pool = ranking[(ranking["rank_pct_today"] >= 75) & (ranking["decay_pct"] > 0)]
+            if not rise_pool.empty:
+                top_r = rise_pool.tail(1).iloc[0]
+                r_name = top_r.get("name", "") or top_r.name
+                lines.append(f"🚀 最上升 {r_name}: PWin {top_r['pwin_past']:.3f}→{top_r['pwin_today']:.3f} ({top_r['decay_pct']:+.0f}pp, 分位{top_r['rank_pct_today']:.0f}%)")
 
     # 警示
     if temp < 35:
