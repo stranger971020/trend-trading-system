@@ -41,6 +41,7 @@ from config import (
     COL_PCT_CHG,
     COL_VOL,
     COL_OPEN,
+    COL_AMOUNT,
     COL_HIGH,
     COL_LOW,
     MOMENTUM_LOOKBACK,
@@ -390,7 +391,37 @@ def run_backtest(
         except Exception as ex:
             logger.warning("止损分析失败: %s", ex)
 
+    # 缓存回测摘要供报告使用（不含原始数据以节省内存）
+    _cache_backtest_summary(report)
+
     return report
+
+
+# ============================================================
+# 回测摘要缓存（供交易参考报告调用，避免重复计算）
+# ============================================================
+_BACKTEST_SUMMARY_CACHE = None
+
+
+def _cache_backtest_summary(report: dict):
+    """从完整回测报告中提取摘要并缓存。"""
+    global _BACKTEST_SUMMARY_CACHE
+    s = report.get("summary", {})
+    wr = report.get("win_rates", {})
+    _BACKTEST_SUMMARY_CACHE = {
+        "positive_rate": s.get("positive_rate"),
+        "avg_return": s.get("avg_return"),
+        "avg_top3_return": s.get("avg_top3_return"),
+        "avg_top5_return": s.get("avg_top5_return"),
+        "win_rate_gt5": wr.get(">5%", {}).get("rate") if wr else None,
+        "win_rate_gt10": wr.get(">10%", {}).get("rate") if wr else None,
+        "total_predictions": report.get("metadata", {}).get("total_predictions"),
+    }
+
+
+def get_backtest_summary() -> dict:
+    """返回最后一次回测的摘要统计，供报告使用。"""
+    return _BACKTEST_SUMMARY_CACHE
 
 
 # ============================================================
@@ -767,3 +798,271 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ═══════════════════════════════════════════════════════════════
+# ML 模型回测 — 使用真实 LightGBM 模型（V5, 306特征）
+# ═══════════════════════════════════════════════════════════════
+
+def run_ml_backtest(
+    feature_df: pd.DataFrame,
+    stock_daily_df: pd.DataFrame,
+    models: dict,
+    top_n: int = 5,
+    backtest_days: int = 175,
+    forward_horizon: int = 20,
+    stop_loss: float = 0.05,
+    max_hold: int = 20,
+) -> dict:
+    """用真实 ML 模型对历史数据进行回测。
+
+    策略: 每日 ML Top-N 买入 → 5% 硬止损 / 最长持仓 max_hold 天 / 到期卖出
+    Args:
+        feature_df: 特征矩阵（含 ts_code, trade_date, close, amount, 特征列）
+        stock_daily_df: 个股日线（用于价格跟踪）
+        models: {"micro": LGBM, "mid": LGBM} 或 "micro"/"mid" 模型 dict
+        top_n: 每日选股数
+        backtest_days: 回测天数（从最新往前数）
+        forward_horizon: 前向持有期（与训练一致，默认20天）
+        stop_loss: 硬止损阈值（默认5%）
+        max_hold: 最长持仓天数
+
+    Returns:
+        dict 回测摘要（total_return, sharpe, max_drawdown, win_rate, trades...）
+    """
+    from analysis.ml_model import ALL_FEATURES, load_model, _compute_amount_thresholds, assign_group
+
+    df = feature_df.copy()
+    sd = stock_daily_df.copy()
+    sd[COL_TRADE_DATE] = pd.to_datetime(sd[COL_TRADE_DATE])
+
+    # 三分组阈值
+    thresholds = _compute_amount_thresholds(sd)
+
+    # 所有交易日
+    dates = sorted(df[COL_TRADE_DATE].unique())
+    if len(dates) < backtest_days + 2:
+        backtest_days = len(dates) - 2
+    test_end = len(dates) - forward_horizon  # 需要未来收益
+    test_start = max(0, test_end - backtest_days)
+    test_dates = dates[test_start:test_end]
+
+    # 预计算分组
+    amt_map = sd.groupby(COL_TS_CODE)[COL_AMOUNT].mean().to_dict()
+
+    def _grp(code):
+        return assign_group(amt_map.get(code, 0), thresholds)
+
+    # 可用特征列
+    feat_cols = [c for c in ALL_FEATURES if c in df.columns]
+    logger.info("ML 回测: %d 特征, %d 天 (%s ~ %s)",
+                len(feat_cols), len(test_dates), test_dates[0], test_dates[-1])
+
+    # 逐日评分
+    daily_scores = []  # (date, ts_code, score)
+    for date in test_dates:
+        day = df[df[COL_TRADE_DATE] == date]
+        if day.empty:
+            continue
+        for grp_name in ["micro", "mid"]:
+            model = models.get(grp_name) if models else load_model(grp_name)
+            if model is None:
+                continue
+            grp_df = day[day[COL_TS_CODE].map(_grp) == grp_name]
+            if grp_df.empty:
+                continue
+            X = grp_df[feat_cols].fillna(0).values
+            scores = model.predict(X)
+            for code, sc in zip(grp_df[COL_TS_CODE].values, scores):
+                daily_scores.append((date, code, float(sc)))
+
+    score_df = pd.DataFrame(daily_scores, columns=["date", COL_TS_CODE, "score"])
+
+    # 价格表: (ts_code, date) → close（日期统一为 YYYYMMDD 字符串，与特征矩阵一致）
+    price_pivot = sd.pivot_table(index=COL_TRADE_DATE, columns=COL_TS_CODE, values=COL_CLOSE)
+    price_pivot.index = [str(pd.Timestamp(d).strftime("%Y%m%d")) for d in price_pivot.index]
+    date_positions = {str(d): i for i, d in enumerate(price_pivot.index)}
+
+    # ════════════════════════════════════════════════════════
+    # 组合模拟: top_n 个仓位槽，每槽 = 1/top_n 资金（始终满仓）
+    # 每日: 更新持仓 → 有槽空出则用当日 ML Top-N 补仓
+    # 平仓: 5% 硬止损 / 最长 max_hold 天
+    # ════════════════════════════════════════════════════════
+    positions = []  # 已平仓 {entry_date, exit_date, ret, held_days, stop_hit}
+    slots = [None] * top_n  # 每个槽位持有一个 position dict 或 None
+    slot_capital = [1.0 / top_n] * top_n  # 每槽独立资金（初始 1/top_n）
+    equity_curve = []  # 每日组合净值（0-1）
+
+    all_test_dates = [d for d in test_dates if d in date_positions]
+    daily_scores_by_date = score_df.groupby("date")
+
+    def _next_pick(date, today_idx, excluded_codes):
+        """取当日 ML 评分最高的未持仓股票。"""
+        day = score_df[score_df["date"] == date]
+        for _, row in day.sort_values("score", ascending=False).iterrows():
+            code = row[COL_TS_CODE]
+            if code not in excluded_codes:
+                px = price_pivot.iloc[today_idx].get(code)
+                if not pd.isna(px):
+                    return code, float(px)
+        return None, None
+
+    for date in all_test_dates:
+        today_idx = date_positions[date]
+
+        # 1) 更新持仓，触发平仓则空出槽位（资金复利结算）
+        for s in range(top_n):
+            pos = slots[s]
+            if pos is None:
+                continue
+            pos["held_days"] += 1
+            px = price_pivot.iloc[today_idx].get(pos["code"])
+            if pd.isna(px):
+                continue  # 停牌，暂不平仓
+            ret = px / pos["entry_price"] - 1
+            if ret <= -stop_loss or pos["held_days"] >= max_hold:
+                slot_capital[s] *= (1 + ret)  # 复利结算到槽资金
+                positions.append({
+                    "code": pos["code"],
+                    "entry_date": pos["entry_date"],
+                    "exit_date": date,
+                    "return": float(ret),
+                    "held_days": pos["held_days"],
+                    "stop_hit": ret <= -stop_loss,
+                })
+                slots[s] = None  # 空出槽位
+
+        # 2) 用当日 ML Top-N 补仓空槽
+        for s in range(top_n):
+            if slots[s] is not None:
+                continue
+            excluded = {p["code"] for p in slots if p is not None}
+            code, px = _next_pick(date, today_idx, excluded)
+            if code is None:
+                continue
+            slots[s] = {
+                "code": code, "entry_date": date,
+                "entry_price": px, "held_days": 0,
+            }
+
+        # 3) 组合净值 = 各槽位资金 × 当前持仓浮盈（满仓跟踪）
+        day_value = 0.0
+        for s in range(top_n):
+            pos = slots[s]
+            if pos is None:
+                day_value += slot_capital[s]  # 空槽资金按原值
+                continue
+            px = price_pivot.iloc[today_idx].get(pos["code"])
+            pos_val = (px / pos["entry_price"]) if not pd.isna(px) else 1.0
+            day_value += slot_capital[s] * pos_val
+        equity_curve.append(day_value)
+
+    # 期末平仓（结算最后持仓到槽资金）
+    if all_test_dates:
+        final_idx = date_positions[all_test_dates[-1]]
+        for s in range(top_n):
+            pos = slots[s]
+            if pos is None:
+                continue
+            px = price_pivot.iloc[final_idx].get(pos["code"])
+            ret = (px / pos["entry_price"] - 1) if not pd.isna(px) else 0.0
+            slot_capital[s] *= (1 + ret)
+            positions.append({
+                "code": pos["code"], "entry_date": pos["entry_date"],
+                "exit_date": str(price_pivot.index[final_idx]),
+                "return": float(ret), "held_days": pos["held_days"],
+                "stop_hit": False,
+            })
+        # 最终净值 = 5 槽资金总和
+        equity_curve.append(sum(slot_capital))
+
+    if not positions or not equity_curve:
+        return {"status": "no_trades", "total_return": 0, "sharpe": 0,
+                "max_drawdown": 0, "n_trades": 0}
+
+    # 组合统计
+    eq = np.array(equity_curve)
+    total_ret = eq[-1] / eq[0] - 1
+    peak = np.maximum.accumulate(eq)
+    max_dd = float(np.min(eq / peak - 1))
+    daily_rets = np.diff(eq) / eq[:-1]
+    mean_dr = np.mean(daily_rets)
+    std_dr = np.std(daily_rets, ddof=1) if len(daily_rets) > 1 else 0
+    sharpe = (mean_dr / std_dr * np.sqrt(252)) if std_dr > 0 else 0
+
+    rets = [p["return"] for p in positions]
+    win_rate = np.mean([r > 0 for r in rets]) * 100
+    stop_count = sum(1 for p in positions if p["stop_hit"])
+    win_ratio = np.mean([r for r in rets if r > 0]) if any(r > 0 for r in rets) else 0
+    loss_ratio = np.mean([r for r in rets if r < 0]) if any(r < 0 for r in rets) else 0
+
+    result = {
+        "status": "success",
+        "backtest_period": f"{test_dates[0]} ~ {test_dates[-1]}",
+        "n_days": len(all_test_dates),
+        "n_trades": len(positions),
+        "total_return": round(float(total_ret) * 100, 1),
+        "sharpe": round(float(sharpe), 2),
+        "max_drawdown": round(float(max_dd) * 100, 1),
+        "win_rate": round(float(win_rate), 1),
+        "stop_loss_rate": round(float(stop_count / len(positions)) * 100, 1),
+        "avg_win": round(float(win_ratio) * 100, 1),
+        "avg_loss": round(float(loss_ratio) * 100, 1),
+        "profit_loss_ratio": round(float(abs(win_ratio / loss_ratio)) if loss_ratio else 0, 2),
+        "strategy": f"ML Top{top_n} | 5%硬止损 | 最长{max_hold}天 | 满仓",
+        "_positions": positions,
+    }
+    logger.info("ML 回测完成: 总收益 %+.1f%% | Sharpe %.2f | MaxDD %.1f%% | %d 笔 | %d 天",
+                result["total_return"], result["sharpe"],
+                result["max_drawdown"], result["n_trades"], result["n_days"])
+    return result
+
+
+
+def run_ml_backtest_for_report(
+    feature_df: pd.DataFrame | None = None,
+    stock_daily_df: pd.DataFrame | None = None,
+    top_n: int = 5,
+    backtest_days: int = 1000,
+) -> dict:
+    """为报告运行 ML 回测（懒加载数据）。
+
+    Returns:
+        dict 回测摘要（无 _positions，便于 JSON 序列化）
+    """
+    from config import DATA_DIR, DB_PATH
+    import os, sqlite3
+
+    # 懒加载特征矩阵（复用 market_ml 的进程内缓存）
+    if feature_df is None:
+        try:
+            from analysis.market_ml import _load_feature_matrix as _load_fm
+            feature_df = _load_fm()
+        except Exception:
+            cache = os.path.join(DATA_DIR, "feature_matrix_v4.parquet")
+            if not os.path.exists(cache):
+                return {"status": "no_data", "error": "无特征矩阵缓存"}
+            feature_df = pd.read_parquet(cache)
+
+    # 懒加载个股日线
+    if stock_daily_df is None:
+        conn = sqlite3.connect(DB_PATH)
+        stock_daily_df = pd.read_sql_query(
+            "SELECT ts_code, trade_date, close, amount FROM stock_daily ORDER BY ts_code, trade_date",
+            conn,
+        )
+        conn.close()
+
+    # 加载模型
+    from analysis.ml_model import load_model
+    models = {"micro": load_model("micro"), "mid": load_model("mid")}
+    if models["micro"] is None and models["mid"] is None:
+        return {"status": "no_model", "error": "无 ML 模型"}
+
+    result = run_ml_backtest(feature_df, stock_daily_df, models,
+                              top_n=top_n, backtest_days=backtest_days)
+
+    # 去掉 _positions（避免大对象）
+    if isinstance(result, dict):
+        result.pop("_positions", None)
+    return result

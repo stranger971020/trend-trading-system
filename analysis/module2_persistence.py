@@ -380,39 +380,3 @@ def analyze_persistence(
         result["error"] = str(e)
 
     return result
-
-
-def analyze_l3_persistence(l3_daily_df: pd.DataFrame) -> dict:
-    """模块2 L3 扩展：分析三级行业持续性。
-
-    Returns 结构与 analyze_persistence 相同，额外多 l3 相关字段。
-    """
-    result = {
-        "status": "failed",
-        "df": pd.DataFrame(),
-        "high_persistence": [],
-        "medium_persistence": [],
-        "low_persistence": [],
-        "error": None,
-    }
-
-    try:
-        df = compute_persistence(l3_daily_df, mapping=None)
-
-        if df.empty:
-            result["status"] = "degraded"
-            result["error"] = "L3 数据不足"
-            return result
-
-        result["df"] = df
-        result["high_persistence"] = df[df["label"] == "🔥高持续性"]["name"].tolist()
-        result["medium_persistence"] = df[df["label"] == "⚡中等持续性"]["name"].tolist()
-        result["low_persistence"] = df[df["label"] == "⚠️低持续性"]["name"].tolist()
-        result["status"] = "success"
-
-    except Exception as e:
-        logger.error("模块2 L3 分析失败: %s", e, exc_info=True)
-        result["status"] = "failed"
-        result["error"] = str(e)
-
-    return result

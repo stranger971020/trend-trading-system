@@ -4,9 +4,16 @@ from __future__ import annotations
 - 通过 Tushare pro.daily() 获取个股日线 OHLCV
 - 增量更新：只拉取每个股票缺失的交易日
 - 存储到 SQLite (sw_index_data.db → stock_daily)
+
+── Changelog ──
+# 2026-08-05 Claude: 全量池扩池 — fetch_all_stocks 新增 list_dates 参数
+#               新股票按上市日回填(点时间点), 避免拉上市前空数据
+─────────────
 """
 
+
 import logging
+import os
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -61,14 +68,58 @@ CREATE_STOCK_INDEX_SQL = [
 ]
 
 
+PROTECTION_FILE = os.path.join(os.path.dirname(DB_PATH), ".stock_daily_protected")
+
+
+def _is_protected(db_path: str = DB_PATH) -> bool:
+    """检查 stock_daily 是否受保护（禁止 DROP/TRUNCATE）。"""
+    if not os.path.exists(PROTECTION_FILE):
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT COUNT(*) FROM stock_daily").fetchone()
+        conn.close()
+        return row is not None and row[0] > 0
+    except Exception:
+        return False
+
+
 def init_stock_table(db_path: str = DB_PATH) -> None:
-    """确保 stock_daily 表存在。"""
+    """确保 stock_daily 表存在。
+
+    如果保护标记已存在且表非空，禁止 DROP/TRUNCATE 操作。
+    """
     conn = sqlite3.connect(db_path)
     conn.execute(CREATE_STOCK_TABLE_SQL)
     for idx_sql in CREATE_STOCK_INDEX_SQL:
         conn.execute(idx_sql)
     conn.commit()
     conn.close()
+
+
+def reprotect_stock_daily(db_path: str = DB_PATH) -> bool:
+    """写入新数据后验证 stock_daily 完整性并确保保护标记存在。
+
+    Returns:
+        True 如果表中有数据且保护标记已存在或已创建
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT COUNT(*) FROM stock_daily").fetchone()
+        conn.close()
+        count = row[0] if row else 0
+        if count > 0 and not os.path.exists(PROTECTION_FILE):
+            with open(PROTECTION_FILE, "w") as f:
+                f.write(
+                    f"Protected: stock_daily contains historical data ({count} rows). "
+                    f"Do NOT truncate or drop this table.\n"
+                    f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
+            logger.info("数据保护标记已创建: %s (%d 行)", PROTECTION_FILE, count)
+        return count > 0
+    except Exception as e:
+        logger.warning("数据保护检查失败: %s", e)
+        return False
 
 
 def _beijing_date_str() -> str:
@@ -221,6 +272,7 @@ def update_stocks_for_industries(
             time.sleep(STOCK_API_RATE_LIMIT)
 
     conn.close()
+    reprotect_stock_daily(db_path)
     result = {
         "total_stocks": total_stocks,
         "updated": updated_stocks,
@@ -236,15 +288,15 @@ def update_stocks_for_industries(
 def fetch_all_stocks(
     db_path: str,
     stock_codes: list[str],
+    list_dates: dict[str, str] | None = None,
 ) -> dict:
     """全量拉取所有个股日线数据（首次慢，后续增量快）。
 
     Args:
         db_path: 数据库路径
-        stock_codes: 全部需要拉取的股票代码（如 3000 只）
-
-    Returns:
-        {"total_stocks": N, "updated": M, "new_rows": R}
+        stock_codes: 全部需要拉取的股票代码（如 4999 只）
+        list_dates: 可选 {ts_code: 上市日期YYYYMMDD}，新股票按上市日作为起点
+                    （点时间点宇宙，避免拉上市前空数据）
     """
     init_stock_table(db_path)
     conn = sqlite3.connect(db_path)
@@ -260,8 +312,17 @@ def fetch_all_stocks(
             start_dt = datetime.strptime(latest, "%Y%m%d") + timedelta(days=1)
             start_date = start_dt.strftime("%Y%m%d")
         else:
-            start_dt = datetime.strptime(end_date, "%Y%m%d") - timedelta(days=int(STOCK_INITIAL_FETCH_DAYS * 1.6))
-            start_date = start_dt.strftime("%Y%m%d")
+            # 点时间点: 新股从上市日起, 上限 STOCK_INITIAL_FETCH_DAYS*1.6
+            min_dt = datetime.strptime(end_date, "%Y%m%d") - timedelta(days=int(STOCK_INITIAL_FETCH_DAYS * 1.6))
+            if list_dates:
+                ld = list_dates.get(ts_code, "")
+                if ld:
+                    try:
+                        ld_dt = datetime.strptime(ld, "%Y%m%d")
+                        min_dt = max(min_dt, ld_dt)
+                    except ValueError:
+                        pass
+            start_date = min_dt.strftime("%Y%m%d")
 
         if start_date > end_date:
             continue
@@ -291,6 +352,7 @@ def fetch_all_stocks(
         time.sleep(STOCK_API_RATE_LIMIT)
 
     conn.close()
+    reprotect_stock_daily(db_path)
     result = {"total_stocks": len(stock_codes), "updated": updated_stocks, "new_rows": total_new_rows}
     logger.info("全量个股: %d 只, %d 更新, +%d 条", len(stock_codes), updated_stocks, total_new_rows)
     return result
