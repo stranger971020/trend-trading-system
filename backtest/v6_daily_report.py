@@ -23,6 +23,7 @@ v6_daily_report.py — V6 每日交易日报
 #               下游: v6_daily_pipeline.py --report-only 自愈失败时传参
 #               健康检查 FILE_GROUPS 已补 v6_daily_report.py
 # 2026-08-05 Claude: 衰减榜标题下插入
+# 2026-08-06 Claude: 行业衰减榜改 L2（无L2回退L1），改为 衰减TOP10/上升TOP10 双榜
 # 2026-08-06 Claude: Telegram 消息加 PWin 摘要（最衰减/最上升 股票 PWin前→今）
 # 2026-08-06 Claude: 榜单/搜索表加回 PWin(前)/PWin(今) 列（用户要求，与分位/变化并列展示）
 ## 2026-08-06 Claude: compute_decay 衰减度量改方案A — 全市场PWin百分位变化(pp)替代百分比
@@ -271,12 +272,17 @@ def compute_decay(feat, asof_date, lookback=4):
     ind_df = pd.read_csv(INDUSTRY_CSV) if os.path.exists(INDUSTRY_CSV) else None
     if ind_df is not None:
         mapping = ind_df.set_index("ts_code")["l1_name"].to_dict()
+        l2mapping = ind_df.set_index("ts_code")["l2_name"].to_dict()
         result["l1_name"] = result.index.map(mapping).fillna("-")
+        # L2 行业（无 L2 的股票回退到 L1，无缝切换；2026-08-06 用户要求行业榜用 L2）
+        l2m = result.index.map(l2mapping).fillna("")
+        result["l2_name"] = l2m.where(l2m != "", result["l1_name"])
     else:
         result["l1_name"] = "-"
+        result["l2_name"] = "-"
 
-    # 行业统计
-    ind_stats = result.groupby("l1_name")["decay_pct"].agg(["mean", "count"]).sort_values("mean")
+    # L2 行业统计（Top10 衰减 / Bottom10 上升）
+    ind_stats = result.groupby("l2_name")["decay_pct"].agg(["mean", "count"]).sort_values("mean")
 
     # 股票名称
     db = sqlite3.connect(STOCK_DB)
@@ -431,10 +437,15 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
             color = '#dc2626' if dc < -10 else ('#f59e0b' if dc < 0 else '#16a34a')
             rise_rows += f"<tr><td>{i}</td><td style='font-size:.8rem'>{idx}</td><td style='font-size:.78rem;color:#64748b'>{row.get('name','')}</td><td style='font-size:.78rem;color:#64748b'>{row['l1_name']}</td><td style='font-size:.76rem'>{row['pwin_past']:.3f}</td><td style='font-size:.76rem'>{row['pwin_today']:.3f}</td><td style='color:{color};font-weight:600'>{dc:+.1f}pp</td></tr>"
 
-        ind_rows = ""
+        # L2 行业双榜: 衰减 TOP10 + 逆势上升 TOP10（2026-08-06 用户要求）
+        ind_down_rows = ""
         for idx, row in ind_stats.head(10).iterrows():
             color = "#dc2626" if row["mean"] < -10 else ("#f59e0b" if row["mean"] < 0 else "#16a34a")
-            ind_rows += f"<tr><td>{idx}</td><td>{int(row['count'])}</td><td style='color:{color};font-weight:600'>{row['mean']:+.1f}pp</td></tr>"
+            ind_down_rows += f"<tr><td style='font-size:.78rem'>{idx}</td><td>{int(row['count'])}</td><td style='color:{color};font-weight:600'>{row['mean']:+.1f}pp</td></tr>"
+        ind_up_rows = ""
+        for idx, row in ind_stats.tail(10)[::-1].iterrows():
+            color = "#dc2626" if row["mean"] < -10 else ("#f59e0b" if row["mean"] < 0 else "#16a34a")
+            ind_up_rows += f"<tr><td style='font-size:.78rem'>{idx}</td><td>{int(row['count'])}</td><td style='color:{color};font-weight:600'>{row['mean']:+.1f}pp</td></tr>"
 
         # 全量数据 JSON（供前端搜索，~4951条×8字段≈400KB，可接受）
         rank_cols = ["ts_code", "name", "l1_name", "pwin_past", "pwin_today",
@@ -488,13 +499,23 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
         </div>
       </div>
       <div style="margin-top:20px">
-        <div style="font-weight:700;margin-bottom:8px">行业衰减排名
-          <input type="text" id="indSearch" placeholder="筛选行业..." style="margin-left:10px;padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:.8rem;width:180px" oninput="filterIndustry()">
+        <div style="font-weight:700;margin-bottom:8px">行业衰减排名（L2）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div style="font-weight:700;color:#dc2626;margin-bottom:8px">🔴 行业衰减 TOP 10（L2）</div>
+            <table class="data-table">
+              <tr><th>行业</th><th>股票数</th><th>平均变化(pp)</th></tr>
+              {ind_down_rows}
+            </table>
+          </div>
+          <div>
+            <div style="font-weight:700;color:#16a34a;margin-bottom:8px">🟢 行业逆势上升 TOP 10（L2）</div>
+            <table class="data-table">
+              <tr><th>行业</th><th>股票数</th><th>平均变化(pp)</th></tr>
+              {ind_up_rows}
+            </table>
+          </div>
         </div>
-        <table class="data-table" id="indTable">
-          <tr><th>行业</th><th>股票数</th><th>平均变化(pp)</th></tr>
-          {ind_rows}
-        </table>
       </div>
       <div style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.88rem;color:#475569">
         > 使用方式: ① 搜索你的持仓看排名 · ② 从 🔴/🟢 两端各挑 2-3 只加自选观察 · ③ 避开衰减最严重的行业<br>
