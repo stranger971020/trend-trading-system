@@ -23,6 +23,8 @@ v6_daily_report.py — V6 每日交易日报
 #               下游: v6_daily_pipeline.py --report-only 自愈失败时传参
 #               健康检查 FILE_GROUPS 已补 v6_daily_report.py
 # 2026-08-05 Claude: 衰减榜标题下插入
+# 2026-08-06 Claude: deploy+telegram 顺序改为 先部署→等Pages成功→再推Telegram(保证链接可用)
+#               新增 _wait_for_pages_deploy 轮询 Actions API; 部署超时/失败仍推TG但附警告
 # 2026-08-06 Claude: 上升榜加确定性过滤(当前分位≥75且上升) — 变化=赔率, 分位=确定性, 两者兼备才上榜
 # 2026-08-06 Claude: 行业衰减榜改 L2（无L2回退L1），改为 衰减TOP10/上升TOP10 双榜
 # 2026-08-06 Claude: Telegram 消息加 PWin 摘要（最衰减/最上升 股票 PWin前→今）
@@ -760,6 +762,42 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
 # 主流程
 # ═══════════════════════════════════════════════════════════════
 
+def _wait_for_pages_deploy(commit_sha: str, timeout_s: int = 600, poll_s: int = 15) -> bool:
+    """等待 GitHub Pages Actions 部署完成（2026-08-06: 部署成功后再推 Telegram，保证链接可用）。
+
+    Returns:
+        True = 部署成功（或无可查询 token 时退化为立即返回）; False = 超时/失败
+    """
+    import json as _json
+    import re as _re
+    import subprocess
+    import time as _time
+    import urllib.request
+
+    remote = subprocess.run(["git", "config", "remote.origin.url"],
+                            capture_output=True, text=True).stdout.strip()
+    m = _re.search(r"https://([^:]+):([^@]+)@github.com/(.+)", remote)
+    if not m:
+        return True  # 无 token，跳过等待（退化为立即推）
+    token = m.group(2)
+    repo = m.group(3).replace(".git", "")
+    deadline = _time.time() + timeout_s
+    while _time.time() < deadline:
+        try:
+            req = urllib.request.Request(
+                f"https://api.github.com/repos/{repo}/actions/runs?head_sha={commit_sha}&per_page=1",
+                headers={"Authorization": f"token {token}", "Accept": "application/vnd.github+json"})
+            runs = _json.load(urllib.request.urlopen(req, timeout=10)).get("workflow_runs", [])
+            if runs:
+                run = runs[0]
+                if run["status"] == "completed":
+                    return run.get("conclusion") == "success"
+        except Exception:
+            pass
+        _time.sleep(poll_s)
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="V6 每日交易日报")
     parser.add_argument("--asof", type=str, default="", help="分析基准日 YYYYMMDD")
@@ -831,8 +869,32 @@ def main():
         f.write(html)
     print(f"✅ HTML: {html_path}", file=sys.stderr)
 
-    # ── Telegram ──
+    # ── Deploy（先部署，2026-08-06: 等部署成功后再推 Telegram，保证 TG 链接可用）──
+    deployed_sha = None
+    if args.deploy:
+        import subprocess
+        subprocess.run(["git", "add", f"reports/v6_daily/"], cwd=PROJECT_ROOT, capture_output=True)
+        status = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=PROJECT_ROOT)
+        if status.returncode != 0:
+            subprocess.run(["git", "commit", "-m", f"📊 V6日报更新 {trading_date}"], cwd=PROJECT_ROOT, capture_output=True)
+            result = subprocess.run(["git", "push"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+            if result.returncode == 0:
+                deployed_sha = subprocess.run(["git", "rev-parse", "HEAD"],
+                                              cwd=PROJECT_ROOT, capture_output=True, text=True).stdout.strip()
+                print(f"✅ 已部署到 GitHub Pages: {GITHUB_BASE}/v6_daily_{trading_date}.html", file=sys.stderr)
+            else:
+                print(f"❌ git push 失败: {result.stderr}", file=sys.stderr)
+        else:
+            print("ℹ️ 无变更，跳过 git push", file=sys.stderr)
+
+    # ── Telegram（等 GitHub Pages 部署成功后再推）──
     if args.telegram:
+        if deployed_sha:
+            deploy_ok = _wait_for_pages_deploy(deployed_sha, timeout_s=600)
+            if deploy_ok:
+                print("✅ GitHub Pages 部署成功，推送 Telegram", file=sys.stderr)
+            else:
+                print("⚠️ GitHub Pages 部署超时/失败，仍推送 Telegram（链接可能延迟）", file=sys.stderr)
         try:
             from notify.telegram_sender import send_single_message
             msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days)
@@ -843,23 +905,6 @@ def main():
                 print("❌ Telegram 推送失败", file=sys.stderr)
         except Exception as e:
             print(f"❌ Telegram 异常: {e}", file=sys.stderr)
-
-    # ── Deploy ──
-    if args.deploy:
-        import subprocess
-        # 添加新的 HTML 文件
-        subprocess.run(["git", "add", f"reports/v6_daily/"], cwd=PROJECT_ROOT, capture_output=True)
-        # 检查是否有变更
-        status = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=PROJECT_ROOT)
-        if status.returncode != 0:
-            subprocess.run(["git", "commit", "-m", f"📊 V6日报更新 {trading_date}"], cwd=PROJECT_ROOT, capture_output=True)
-            result = subprocess.run(["git", "push"], cwd=PROJECT_ROOT, capture_output=True, text=True)
-            if result.returncode == 0:
-                print(f"✅ 已部署到 GitHub Pages: {GITHUB_BASE}/v6_daily_{trading_date}.html", file=sys.stderr)
-            else:
-                print(f"❌ git push 失败: {result.stderr}", file=sys.stderr)
-        else:
-            print("ℹ️ 无变更，跳过 git push", file=sys.stderr)
 
 
 if __name__ == "__main__":

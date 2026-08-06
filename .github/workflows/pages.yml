@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  # 2026-08-06: true — 连续 push 时取消旧部署，只部署最新（Pages 只关心最新内容，避免排队堆积）
+  cancel-in-progress: true
 
 jobs:
   deploy:
