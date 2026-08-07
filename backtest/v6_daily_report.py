@@ -40,6 +40,8 @@ v6_daily_report.py — V6 每日交易日报
 #               (HERMES-20260805-001) — 修正派发模板的 mojibake/残缺 <b> 标签
 #               并校准 Gate 阻塞率表述（回测口径: range≈93%/bear≈34%，非报告固定 gate_proxy=25%）
 #               同步修正 compute_temperature 过时 docstring（"PWin 从不低于0.75"已不成立）
+# 2026-08-07 Claude: 行业衰减排名(L2)区段增加查询框 — 与个股搜索一致，基于全量 indData 实时查询
+#               显示 行业/股票数/平均变化(pp)/全行业排名; filterIndustry 改数据驱动(原行过滤stub未接线)
 ─────────────
 """
 
@@ -509,6 +511,13 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
       </div>
       <div style="margin-top:20px">
         <div style="font-weight:700;margin-bottom:8px">行业衰减排名（L2）</div>
+        <!-- 行业搜索框（2026-08-07: 与个股搜索类似，基于全量 L2 行业 indData 实时查询） -->
+        <div style="margin-bottom:14px">
+          <input type="text" id="indSearch" placeholder="🔍 输入行业名称 搜索行业排名（L2）..."
+            style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:.9rem;outline:none"
+            oninput="filterIndustry()">
+          <div id="indResult" style="margin-top:8px;font-size:.82rem;color:#475569"></div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div>
             <div style="font-weight:700;color:#dc2626;margin-bottom:8px">🔴 行业衰减 TOP 10（L2）</div>
@@ -562,13 +571,24 @@ function filterDecay() {{
 }}
 function filterIndustry() {{
   var q = document.getElementById('indSearch').value.toLowerCase();
-  var rows = document.querySelectorAll('#indTable tr');
-  for (var i = 1; i < rows.length; i++) {{
-    var cell = rows[i].cells[0];
-    if (cell) {{
-      var txt = cell.textContent.toLowerCase();
-      rows[i].style.display = txt.indexOf(q) >= 0 ? '' : 'none';
+  var result = document.getElementById('indResult');
+  if (!q || q.length < 1) {{ result.innerHTML = ''; return; }}
+  var matches = indData.filter(function(r) {{
+    return (r.l2_name || '').toLowerCase().indexOf(q) >= 0;
+  }});
+  if (matches.length === 0) {{
+    result.innerHTML = '<span style=color:#dc2626>未找到匹配行业</span>';
+  }} else {{
+    var html = '<table class=data-table style=margin-top:4px><tr><th>行业(L2)</th><th>股票数</th><th>平均变化(pp)</th><th>全行业排名<sup title="按全市场L2行业平均PWin百分位变化升序: 1=衰减最重, N=上升最猛">?</sup></th></tr>';
+    for (var i = 0; i < Math.min(matches.length, 30); i++) {{
+      var r = matches[i];
+      var rank = indData.indexOf(r) + 1;
+      var color = r.mean < -10 ? '#dc2626' : r.mean < 0 ? '#f59e0b' : '#16a34a';
+      html += '<tr><td>' + r.l2_name + '</td><td>' + r.count + '</td><td style=color:' + color + ';font-weight:600>' + (r.mean>0?'+':'') + r.mean.toFixed(1) + 'pp</td><td>' + rank + '/' + indData.length + '</td></tr>';
     }}
+    html += '</table>';
+    if (matches.length > 30) html += '<div style=color:#94a3b8;font-size:.75rem>显示前30条，共' + matches.length + '条匹配</div>';
+    result.innerHTML = html;
   }}
 }}
 </script>"""
