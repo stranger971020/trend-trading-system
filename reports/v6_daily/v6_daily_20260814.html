@@ -53,22 +53,25 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
 
 
     <div class="conclusion" style="border-left-color:#f59e0b">
-      <div class="conclusion-title" style="color:#f59e0b">🎯 温度 49.7/100 · 中温 · range</div>
-      <div class="conclusion-sub">建议仓位: <b>3只 (半仓)</b> · 行业覆盖 ≥ 4 · 该配置历史 T+1 胜率 49.2% · D+5 胜率 48.3%</div>
+      <div class="conclusion-title" style="color:#f59e0b">🎯 温度 50.0/100 · 中温 · range</div>
+      <div class="conclusion-sub">建议仓位: <b>3只 (半仓)</b> · 行业覆盖 ≥ 4 · 该配置历史 T+1 胜率 49.4% · D+5 胜率 41.7%</div>
     </div>
 
     <div class="section">
       <div class="section-title">🌡️ 市场温度计</div>
       <div style="text-align:center;padding:10px 0">
-        <div style="font-size:3rem;font-weight:800;color:#f59e0b;line-height:1.2">49.7</div>
+        <div style="font-size:3rem;font-weight:800;color:#f59e0b;line-height:1.2">50.0</div>
         <div style="font-size:1.2rem;color:#f59e0b;font-weight:600">中温</div>
       </div>
-      <div style="background:#e2e8f0;border-radius:6px;height:12px;margin:10px 0"><div style="background:linear-gradient(90deg,#ef4444,#f59e0b,#16a34a);border-radius:6px;height:12px;width:49.74012892828364%"></div></div>
+      <div style="background:#e2e8f0;border-radius:6px;height:12px;margin:10px 0"><div style="background:linear-gradient(90deg,#16a34a,#f59e0b,#ef4444);border-radius:6px;height:12px;width:50.0%"></div></div>
       <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#94a3b8">
-        <span>0 极寒</span><span>50 适中</span><span>100 偏热</span>
+        <span>0 低温(优选)</span><span>50 中温</span><span>100 过热(警惕)</span>
+      </div>
+      <div style="font-size:.72rem;color:#94a3b8;text-align:center;margin-top:4px">
+        分档: 低温 &lt;45.0 · 中温 45.0-55.0 · 高温 &gt;55.0 ｜ 温度=市场热度合成(S1)，高温=过热风险
       </div>
       <div class="dashboard-row" style="margin-top:16px">
-        <span>Gate 阻塞率: <b>25.0%</b></span>
+        <span>Gate 阻塞率: <b>97.7%</b></span>
         <span>P(Win) 中位数: <b>0.0557</b></span>
         <span>覆盖: <b>4964</b> 只</span>
       </div>
@@ -78,7 +81,7 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
         <span>特征日期: <b>20260814</b></span>
       </div>
       <div style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.88rem;color:#475569">
-        > 市场温度适中，可适度参与。选股时关注 P(Win) > 0.70 的高置信度标的。
+        > 市场热度适中。适度参与，选股时关注 P(Win) 高分位的高置信度标的。
       </div>
     </div>
 
@@ -96,7 +99,7 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
           <b>✅ 有效用法：</b><br />
           - <b>选股过滤</b>：看相对排名（前25% vs 后75%），回避跌入后75%的股票<br />
           - <b>板块轮动</b>：行业衰减水平横向比较（资金流向）<br />
-          - <b>市场温度</b>：高温（temp&gt;55）可加仓、低温（temp&lt;35）轻仓；回测口径 Gate 阻塞率仅作 regime 参考（range 市≈93%、bear 市≈34%）<br />
+          - <b>市场温度</b>：低温（temp&lt;45）=市场不拥挤、可积极；高温（temp&gt;55）=过热、降仓（实证反向）；回测口径 Gate 阻塞率仅作 regime 参考（range 市≈93%、bear 市≈34%）<br />
           <br>
           <b>❌ 无效用法：</b><br />
           - <b>连板/事件驱动股</b>（V6 无封单量/龙虎榜特征，PWin 暴跌是模型"失去特征预测能力"而非"必跌"，需独立接力框架）<br />
@@ -212,19 +215,19 @@ function filterIndustry() {
 
     <div class="section">
       <div class="section-title">📊 仓位配置规则</div>
-      <div style="font-size:.82rem;color:#94a3b8;margin-bottom:16px">基于 98 folds · 2.5 年历史 · 三维分位回归</div>
+      <div style="font-size:.82rem;color:#94a3b8;margin-bottom:16px">基于 98 folds · 2.5 年历史 · 温度带+Regime 回归</div>
       <table class="data-table">
-        <tr><th>Regime</th><th>温度</th><th>建议仓位</th><th>历史 T+1 WR</th><th>历史 D+5 WR</th></tr>
-        <tr><td>bull</td><td>低温</td><td><b>5只 (满仓)</b></td><td>61.9%</td><td>70.4%</td></tr><tr><td>bull</td><td>中温</td><td><b>3只 (半仓)</b></td><td>50.0%</td><td>53.3%</td></tr><tr><td>bull</td><td>高温</td><td><b>1只或空仓</b></td><td>33.3%</td><td>41.7%</td></tr><tr><td>range</td><td>低温</td><td><b>2只 (轻仓)</b></td><td>36.4%</td><td>42.4%</td></tr><tr style="background:#eef2ff"><td>range</td><td>中温</td><td><b>3只 (半仓) ← 当前</b></td><td>49.2%</td><td>48.3%</td></tr><tr><td>range</td><td>高温</td><td><b>3只 (半仓)</b></td><td>57.9%</td><td>44.4%</td></tr><tr><td>bear</td><td>低温</td><td><b>5只 (满仓)</b></td><td>74.1%</td><td>59.3%</td></tr>
+        <tr><th>Regime</th><th>温度</th><th>建议仓位</th><th>历史 T+1 WR</th><th>历史 D+5 WR</th><th>备注</th></tr>
+        <tr><td>bull</td><td>低温</td><td><b>5只 (满仓)</b></td><td>60.0%</td><td>72.0%</td><td></td></tr><tr><td>bull</td><td>中温</td><td><b>1只或空仓</b></td><td>29.4%</td><td>43.9%</td><td></td></tr><tr><td>bull</td><td>高温</td><td><b>3只 (半仓)</b></td><td>53.9%</td><td>56.5%</td><td></td></tr><tr><td>range</td><td>低温</td><td><b>3只 (半仓)</b></td><td>48.2%</td><td>50.9%</td><td></td></tr><tr style="background:#eef2ff"><td>range</td><td>中温</td><td><b>3只 (半仓) ← 当前</b></td><td>49.4%</td><td>41.7%</td><td></td></tr><tr><td>range</td><td>高温</td><td><b>3只 (半仓)</b></td><td>60.0%</td><td>46.7%</td><td></td></tr><tr><td>bear</td><td>低温</td><td><b>5只 (满仓)</b></td><td>100.0%</td><td>83.3%</td><td> <span title="fold 样本不足, 仅供参考" style="color:#dc2626">⚠️样本少</span></td></tr><tr><td>bear</td><td>中温</td><td><b>5只 (满仓)</b></td><td>75.0%</td><td>75.0%</td><td> <span title="fold 样本不足, 仅供参考" style="color:#dc2626">⚠️样本少</span></td></tr><tr><td>bear</td><td>高温</td><td><b>3只 (半仓)</b></td><td>55.6%</td><td>22.2%</td><td> <span title="fold 样本不足, 仅供参考" style="color:#dc2626">⚠️样本少</span></td></tr>
       </table>
       <div style="margin-top:14px;padding:12px;background:#fef2f2;border-radius:8px;font-size:.85rem;color:#dc2626">
-        ⚠️ Bull+高温是陷阱！历史 D+5 仅 32.3%。过度分散反而降胜率：4-6 个行业最优 (55.9% WR)。
+        ⚠️ Bull+高温是陷阱！历史 D+5 仅 56.5%。过度分散反而降胜率：4-6 个行业最优 (55.9% WR)。
       </div>
     </div>
 
     <div class="section">
       <div class="section-title">📋 明日交易策略</div>
-      <div class='plan-item'>🟡 温度适中 (49.7) — 适度参与，仓位 3只 (半仓)</div><div class='plan-item'>🚫 规避行业: 休闲食品（衰减最严重）</div>
+      <div class='plan-item'>🟡 温度适中 (50.0) — 适度参与，仓位 3只 (半仓)</div><div class='plan-item'>🚫 规避行业: 休闲食品（衰减最严重）</div>
       <div class="plan-item" style="margin-top:10px">
         📊 仓位: <b>3只 (半仓)</b> · 行业覆盖 ≥ 4 · 单票 ≤ 25%
       </div>
