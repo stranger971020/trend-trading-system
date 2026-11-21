@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-21T16:00:25",
+  "sample": {
+    "start": "20210104",
+    "end": "20261022",
+    "universe": "PIT 100-500亿 (mktcap 快照推隐含股本)",
+    "threshold": "近20日涨幅>=15%",
+    "outcome": "未来20日，t日收盘可得",
+    "cost": "单边0.15%"
+  },
+  "fragile_crash_15": {
+    "dates": 140,
+    "hold": {
+      "n": 6373,
+      "mean": -0.0525,
+      "median": -0.0722,
+      "cvar5": -0.3953,
+      "p_lt_5": 0.549,
+      "p_lt_10": 0.4304,
+      "final_median": 0.1736,
+      "final_mean": 0.2458,
+      "giveback": 0.1686
+    },
+    "rule": {
+      "n": 6373,
+      "mean": -0.0089,
+      "median": -0.0103,
+      "cvar5": -0.0828,
+      "p_lt_5": 0.1542,
+      "p_lt_10": 0.0063,
+      "final_median": 0.2191,
+      "final_mean": 0.3061,
+      "giveback": 0.1083
+    },
+    "avg_initial_trim": 0.4,
+    "trigger_rate": 0.9451
+  },
+  "second_shock_15": {
+    "dates": 150,
+    "hold": {
+      "n": 6894,
+      "mean": -0.0671,
+      "median": -0.0858,
+      "cvar5": -0.3953,
+      "p_lt_5": 0.5866,
+      "p_lt_10": 0.4645,
+      "final_median": 0.1461,
+      "final_mean": 0.2305,
+      "giveback": 0.152
+    },
+    "rule": {
+      "n": 6894,
+      "mean": -0.0097,
+      "median": -0.0201,
+      "cvar5": -0.0703,
+      "p_lt_5": 0.1291,
+      "p_lt_10": 0.0012,
+      "final_median": 0.2094,
+      "final_mean": 0.3049,
+      "giveback": 0.0776
+    }
+  },
+  "peak_12_18": {
+    "n": 494,
+    "hold": {
+      "n": 494,
+      "mean": -0.043,
+      "median": -0.048,
+      "cvar5": -0.328,
+      "p_lt_5": 0.4939,
+      "p_lt_10": 0.3826,
+      "final_median": 0.1062,
+      "final_mean": 0.1133,
+      "giveback": 0.0531
+    },
+    "rule": {
+      "n": 494,
+      "mean": -0.0149,
+      "median": -0.0315,
+      "cvar5": -0.0906,
+      "p_lt_5": 0.2773,
+      "p_lt_10": 0.0081,
+      "final_median": 0.1264,
+      "final_mean": 0.1457,
+      "giveback": 0.0207
+    },
+    "hold_p_final_neg": 0.2632,
+    "rule_p_final_neg": 0.002,
+    "hold_p_giveback_gt10": 0.4231,
+    "rule_p_giveback_gt10": 0.0304
+  },
+  "by_year": [
+    {
+      "year": "2022",
+      "n": 2486,
+      "hold_mean": -0.0684,
+      "hold_cvar5": -0.3852,
+      "rule_mean": -0.0122,
+      "rule_cvar5": -0.0746,
+      "rule_p_lt_10": 0.0036
+    },
+    {
+      "year": "2023",
+      "n": 715,
+      "hold_mean": -0.0493,
+      "hold_cvar5": -0.2991,
+      "rule_mean": -0.0078,
+      "rule_cvar5": -0.0774,
+      "rule_p_lt_10": 0.0
+    },
+    {
+      "year": "2024",
+      "n": 992,
+      "hold_mean": -0.0032,
+      "hold_cvar5": -0.2821,
+      "rule_mean": -0.0051,
+      "rule_cvar5": -0.0787,
+      "rule_p_lt_10": 0.006
+    },
+    {
+      "year": "2025",
+      "n": 344,
+      "hold_mean": 0.0184,
+      "hold_cvar5": -0.239,
+      "rule_mean": -0.0075,
+      "rule_cvar5": -0.0901,
+      "rule_p_lt_10": 0.0116
+    },
+    {
+      "year": "2026",
+      "n": 1836,
+      "hold_mean": -0.0721,
+      "hold_cvar5": -0.4382,
+      "rule_mean": -0.0073,
+      "rule_cvar5": -0.0907,
+      "rule_p_lt_10": 0.0114
+    }
+  ],
+  "cost_sensitivity": [
+    {
+      "cost": 0.0005,
+      "mean": -0.0079,
+      "cvar5": -0.0818,
+      "p_lt_10": 0.0056
+    },
+    {
+      "cost": 0.0015,
+      "mean": -0.0089,
+      "cvar5": -0.0828,
+      "p_lt_10": 0.0063
+    },
+    {
+      "cost": 0.003,
+      "mean": -0.0104,
+      "cvar5": -0.0843,
+      "p_lt_10": 0.0066
+    }
+  ],
+  "concentration_fragile_crash": [
+    {
+      "n": 1,
+      "rule": "hold",
+      "draws": 70000,
+      "mean": -0.0323,
+      "median": -0.0502,
+      "cvar5": -0.3628,
+      "p_lt_10": 0.382,
+      "mdd_mean": -0.1878,
+      "mdd_p95": -0.3745,
+      "upside_capture": 1.0
+    },
+    {
+      "n": 1,
+      "rule": "R7+trail8",
+      "draws": 70000,
+      "mean": -0.0051,
+      "median": -0.007,
+      "cvar5": -0.0796,
+      "p_lt_10": 0.0047,
+      "mdd_mean": -0.0378,
+      "mdd_p95": -0.081,
+      "upside_capture": 0.2022
+    },
+    {
+      "n": 3,
+      "rule": "hold",
+      "draws": 70000,
+      "mean": -0.032,
+      "median": -0.0381,
+      "cvar5": -0.286,
+      "p_lt_10": 0.3059,
+      "mdd_mean": -0.1475,
+      "mdd_p95": -0.2897,
+      "upside_capture": 1.0
+    },
+    {
+      "n": 3,
+      "rule": "R7+trail8",
+      "draws": 70000,
+      "mean": -0.0049,
+      "median": -0.013,
+      "cvar5": -0.0563,
+      "p_lt_10": 0.0001,
+      "mdd_mean": -0.0308,
+      "mdd_p95": -0.0567,
+      "upside_capture": 0.1922
+    },
+    {
+      "n": 5,
+      "rule": "hold",
+      "draws": 69500,
+      "mean": -0.0312,
+      "median": -0.035,
+      "cvar5": -0.2634,
+      "p_lt_10": 0.2753,
+      "mdd_mean": -0.135,
+      "mdd_p95": -0.2658,
+      "upside_capture": 1.0
+    },
+    {
+      "n": 5,
+      "rule": "R7+trail8",
+      "draws": 69500,
+      "mean": -0.0048,
+      "median": -0.0117,
+      "cvar5": -0.0491,
+      "p_lt_10": 0.0,
+      "mdd_mean": -0.0276,
+      "mdd_p95": -0.0493,
+      "upside_capture": 0.1879
+    }
+  ]
+}

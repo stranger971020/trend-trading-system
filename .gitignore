@@ -15,3 +15,7 @@ reports/v6_daily/*.json
 # 重放派生池子缓存（源数据变化自动重建，不入库）
 backtest/cache/pool_*.parquet
 backtest/cache/pool_*.meta.json
+
+# 浮盈保护研究派生缓存（rb_data.py / rb_trailing.py 可重建，不入库）
+backtest/cache/rb_*.parquet
+backtest/cache/rb_*.csv
