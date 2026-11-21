@@ -118,6 +118,7 @@ v6_daily_report.py — V6 每日交易日报
 """
 
 import argparse
+import html
 import json
 import os
 import pickle
@@ -139,6 +140,7 @@ from analysis.emotion_cycle import compute_emotion                      # noqa: 
 from analysis.shadow_portfolio import record_picks, attribute_backtest, score_log  # noqa: E402
 from analysis.market_wave import wave_radar                            # noqa: E402
 from analysis.mainline import current_mainlines                        # noqa: E402
+from analysis.risk_guard_view import resolve as resolve_guard         # noqa: E402
 
 MODEL_DIR = os.path.join(PROJECT_ROOT, "data_storage", "lgb_models")
 FEAT_PARQUET = os.path.join(PROJECT_ROOT, "data_storage", "feature_matrix_v5.parquet")
@@ -146,6 +148,7 @@ STOCK_DB = os.path.join(PROJECT_ROOT, "data_storage", "sw_index_data.db")
 INDUSTRY_CSV = os.path.join(PROJECT_ROOT, "data_storage", "stock_industry_mapping.csv")
 FINAL_JSON = os.path.join(SCRIPT_DIR, "v6_final_20260801.json")
 REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports", "v6_daily")
+RISK_STATE_DEFAULT = os.path.join(PROJECT_ROOT, "data_storage", "risk_state.json")
 
 ENGINES = ["momentum", "reversion", "breakdown"]  # 注意: breakout 在模型中名为 breakout
 
@@ -741,7 +744,70 @@ def compute_card(asof):
         return None
 
 
-def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None):
+def _esc(v):
+    return html.escape(str(v if v is not None else ""), quote=False)
+
+
+def load_risk_guard(path: str, trading_date: str, expected_date: str | None,
+                    stale_days: int) -> tuple[dict | None, str | None]:
+    """读取 risk_state.py 产出的守卫 payload；任何失败都不抛。"""
+    if not path or not os.path.exists(path):
+        return None, f"风险状态文件不存在: {path}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as e:  # noqa: BLE001
+        return None, f"风险状态解析失败: {e}"
+    if not isinstance(payload, dict) or payload.get("schema") != 1:
+        return None, f"风险状态 schema 非法: {payload.get('schema') if isinstance(payload, dict) else type(payload)}"
+    for k in ("asof", "state", "score", "components", "action", "metrics"):
+        if k not in payload:
+            return None, f"风险状态缺字段: {k}"
+    return payload, None
+
+
+def _guard_card_html(view) -> str:
+    """决策单内的「浮盈保护」子块（不新增顶层 section）。"""
+    if not view:
+        return ""
+    if not view.get("ok"):
+        warns = "；".join(view.get("warnings") or ["风险状态不可用"])
+        return (f'<div style="margin-top:10px;padding:8px 10px;border-left:3px solid #dc2626;'
+                f'background:#fef2f2;font-size:.84rem;color:#991b1b">'
+                f'⚠️ {_esc(warns)} — 新建仓建议暂停；已有仓位沿用原纪律。</div>')
+    ex = view.get("existing") or {}
+    ne = view.get("new_entry") or {}
+    div = ne.get("divergence")
+    div_html = (f'<span style="color:#b45309">⚠️ {_esc(div)}</span><br>' if div else "")
+    stale = view.get("stale_days") or 0
+    stale_txt = f" · 数据滞后 {stale} 个交易日" if stale else ""
+    return f"""
+  <div style="margin-top:12px;padding:10px 12px;border-left:3px solid #7c3aed;background:#faf5ff">
+    <div style="font-weight:600;color:#6d28d9">🛡 浮盈保护 · 防守层（适用对象：已有浮盈仓）</div>
+    <div style="font-size:.82rem;color:#64748b;margin-top:2px">状态 <b>{_esc(view.get('state_label'))}</b>
+      · 脆弱度 {view.get('score')}/8 · 基准 {_esc(view.get('asof'))}{stale_txt}</div>
+    <div style="font-size:.84rem;margin-top:6px">
+      ✂️ 已有浮盈仓：{_esc(ex.get('text'))}<br>
+      🧱 新仓/总仓上限：<b>{_esc(ne.get('ceiling_text'))}</b><br>
+      {div_html}
+      <span style="color:#64748b">进攻/新仓建议见上方温度档与决策单；本块只处理已有浮盈/当前持仓，不覆盖 V6 进攻层。</span><br>
+      <span style="color:#94a3b8">口径：初减=已有浮盈仓比例；上限=新仓/总仓占总资金比例。</span>
+    </div>
+  </div>"""
+
+
+def _exit_text(view) -> str:
+    if view and view.get("ok") and view.get("state") in ("fragile", "crash"):
+        return ("④ 出场(已有浮盈): 先按上条初减，剩余仓位自持有期最高收盘回撤8%即减/退 "
+                "· 浮亏-10%止损")
+    return "④ 出场: 浮盈≥+10%后从最高点回撤8%卖 · 浮亏-10%无条件止损(兜底)"
+
+
+def _entry_pause_note(view) -> str:
+    return "（参考；新仓建议暂停）" if (not view or not view.get("ok")) else ""
+
+
+def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None):
     """生成完整 HTML"""
     rules, (lo, hi), composite = _load_rules_config()
     n_folds_meta = _rules_n_folds()
@@ -1339,7 +1405,10 @@ function filterIndustry() {{
 <div class="conclusion" style="border-left-color:#0ea5e9">
   <div class="conclusion-title">🎯 波段决策单（100-500亿域）</div>
   <div class="conclusion-sub">① 阶段 <b>{_c.get('regime', '—')}</b> {_std_txt}
-     · 建议仓位 <b>{_c.get('position', '—')}</b> {_exc_txt}</div>
+     · 进攻/新仓仓位 <b>{_c.get('position', '—')}</b>{_entry_pause_note(risk_guard)} {_exc_txt}</div>
+  <div style="font-size:.8rem;color:#64748b;margin-top:4px">
+    进攻/新仓建议见本节；已有浮盈仓动作见下方「🛡 防守层」子块。
+  </div>
   <div style="font-size:.84rem;margin-top:8px">
     ② 行业 {('✅ ' + _ind_b) if _ind_b else ('○ ' + str(_c.get('arm_note', '不限行业')))}
     {('<br>&nbsp;&nbsp;&nbsp;🚫 回避: ' + _ind_a) if _ind_a else ''}</div>
@@ -1347,12 +1416,14 @@ function filterIndustry() {{
     <th>#</th><th>名称</th><th>代码</th><th>市值</th><th>P≧20%</th><th>预期</th></tr></thead>
     <tbody>{''.join(_rows) or '<tr><td colspan="6">无候选</td></tr>'}</tbody></table>
   {_neg_warn}
+  {_guard_card_html(risk_guard)}
   <div style="font-size:.82rem;margin-top:10px;color:#475569">
-    ④ 出场: 浮盈≥+10%后回撤8%卖 · 浮亏-10%止损（兜底）<br>
+    {_exit_text(risk_guard)}<br>
     ⑤ 纪律: 首仓≤1/3 · 同股间隔≥20日 · 单票≤25% · 行业≥4</div>
 </div>"""
     else:
-        card_html = ""
+        card_html = (f'<div class="conclusion" style="border-left-color:#7c3aed">'
+                     f'{_guard_card_html(risk_guard)}</div>' if risk_guard else "")
 
     # ── 完整页面 ──
     report_dt = datetime.strptime(report_date, "%Y%m%d")
@@ -1402,7 +1473,7 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
 
 <div class="header">
   <h1>📊 V6 每日交易日报</h1>
-  <div class="time">分析基准: {report_date} {weekday}（A股收盘后）</div>
+  <div class="time">上一交易日: {report_date} {weekday}（A股收盘后）</div>
   <div class="time">下一交易日: {next_date} {next_weekday}</div>
   <div class="meta">特征: {feat_date} · 行情: {price_date} · 模型: {model_ver}</div>
 </div>
@@ -1435,7 +1506,27 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
     return html
 
 
-def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None):
+def _guard_tg_lines(view) -> list[str]:
+    """Telegram 里的防守层 1–2 行；不含清仓/卖出指令。"""
+    if not view:
+        return ["⚠️ 风险状态未计算 — 新建仓建议暂停"]
+    if not view.get("ok"):
+        reason = (view.get("warnings") or ["风险状态不可用"])[0]
+        line = f"⚠️ {_esc(reason)}"
+        if "暂停" not in line:
+            line += " — 新建仓建议暂停"
+        return [line]
+    ex = view.get("existing") or {}
+    ne = view.get("new_entry") or {}
+    head = (f"🛡 防守/已有浮盈: {_esc(view.get('state_label'))}（{view.get('score')}/8）"
+            f" · {_esc(ex.get('text'))}")
+    tail = f"　新仓/总仓上限: {_esc(ne.get('ceiling_text'))}"
+    if ne.get("divergence"):
+        tail += f" · {_esc(ne['divergence'])}"
+    return [head, tail]
+
+
+def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None):
     """生成 Telegram 推送消息"""
     rules, (lo, hi), _ = _load_rules_config()
     temp = temp_info["temp"]
@@ -1459,15 +1550,20 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
     _exc = _std.get("excess") or {}
     _exc_txt = (f" · 历史超额 <b>{_exc['excess']}</b>(相对胜率{_exc['rel_win']})" if _exc else "")
     _pos = (_card or {}).get("position") or size
+    _pos_disp = _pos
+    if risk_guard and not risk_guard.get("ok") and any(
+            w in str(_pos) for w in ("试探建仓", "建仓", "低吸", "可积极", "买入")):
+        _pos_disp = "暂停（风险状态不可用）"
     _act = (_card or {}).get("action_note") or ""
 
     lines = [
         f"📊 <b>V6日报 {report_date} {report_wd} → {next_date} {next_wd}</b>",
         "",
         f"🌡️ 温度 <b>{fmt_num(temp, 1)}/100</b> {level} · 阶段 <b>{(_card or {}).get('regime', regime)}</b>{_std_sfx}",
-        f"① 建议仓位 <b>{_pos}</b> · V6档 {size} · 历史T+1胜率 {fmt_pct(hist_t1)}{_exc_txt}",
+        f"① 进攻/新仓仓位 <b>{_pos_disp}</b>{(_entry_pause_note(risk_guard) if not str(_pos_disp).startswith('暂停') else '')} · V6档 {size} · 历史T+1胜率 {fmt_pct(hist_t1)}{_exc_txt}",
     ]
-    if _act:
+    if _act and not (risk_guard and not risk_guard.get("ok")
+                     and any(w in _act for w in ("低吸", "建仓", "买入", "可积极", "反弹"))):
         lines.append(f"　本阶段动作: {_act}")
 
     # 警告前缀置顶：数据滞后 优先于 脆弱度 danger 优先于 大盘技术风险（非触发不显示，保持原格式）
@@ -1484,6 +1580,8 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
     # 常驻风险分一行（无论档位都显示）
     if risk_info:
         lines.append(f"📊 大盘风险: {risk_info['label']}（{risk_info['score']}/6）· 触发: {('、'.join(risk_info['active_signals']) or '无')}")
+    # 防守层：已有浮盈仓（与上面的大盘风险诊断分开）
+    lines.extend(_guard_tg_lines(risk_guard))
 
     # 盘中预案（T-1 条件触发器, 2026-08-19 新增; 非预测"明天会跌", 而是盘中确认后的行动触发器）
     if preplan_info:
@@ -1582,7 +1680,10 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
 
     # 警示
     if temp < lo:
-        lines.append("🟢 温度偏低=市场不拥挤、胜率较高，可积极")
+        if risk_guard and not risk_guard.get("ok"):
+            lines.append("🟢 温度偏低 · ⚠️ 风险状态不可用，建仓建议暂停")
+        else:
+            lines.append("🟢 温度偏低=市场不拥挤、胜率较高，可积极")
     elif temp > hi:
         lines.append("🔴 温度偏高=市场过热，未来5日偏弱，建议降仓")
     if regime == "bull" and level == "高温":
@@ -1601,12 +1702,15 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
 
     url = f"{GITHUB_BASE}/v6_daily_{report_date}.html"
     # ④ 出场 / ⑤ 纪律（2026-09-25 Hermes 新增）
-    lines.append("④ 出场: 浮盈≥+10%后从最高点回撤8%卖 · 浮亏-10%无条件止损(兜底)")
+    lines.append(_exit_text(risk_guard))
     lines.append("⑤ 纪律: 首仓≤1/3 · 同股间隔≥20日 · 单票≤25% · 行业≥4")
     lines.append("")
     lines.append(f'📄 <a href="{url}">完整报告</a>')
 
-    return "\n".join(lines)
+    msg = "\n".join(lines)
+    if len(msg) > 4000:
+        print(f"⚠️ Telegram 消息超过 4000 字符（{len(msg)}），请检查是否需要拆分", file=sys.stderr)
+    return msg
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1671,6 +1775,10 @@ def main():
     parser.add_argument("--deploy", action="store_true", help="git push 到 GitHub Pages")
     parser.add_argument("--stale-days", type=int, default=0,
                         help="数据滞后交易日数(>0 时报告顶部显示数据滞后横幅，由管道自愈失败时传入)")
+    parser.add_argument("--risk-state", type=str, default=RISK_STATE_DEFAULT,
+                        help="risk_state.py 产出的守卫 JSON 路径")
+    parser.add_argument("--expected-date", type=str, default="",
+                        help="期望最新交易日 YYYYMMDD（用于守卫新鲜度判定）")
     parser.add_argument("--final-json", type=str, default="",
                         help="审计 JSON 路径（全量池重训产物，默认模块 FINAL_JSON）")
     args = parser.parse_args()
@@ -1805,10 +1913,30 @@ def main():
     # ── 决策单（2026-09-25 Hermes）: 算一次, HTML 与 Telegram 共用, 避免重复开销 ──
     card_info = compute_card(trading_date)
 
+    # ── 浮盈保护 · 防守层（2026-11-21）: 与进攻层分开，读 risk_state.py 产物 ──
+    _rules_guard, _, _ = _load_rules_config()
+    _size_guard = _rules_guard.get(
+        (str(temp_info.get("regime") or ""), str(temp_info.get("level") or "")),
+        ("—",))[0]
+    _guard_payload, _guard_err = load_risk_guard(
+        args.risk_state, trading_date, args.expected_date or None, stale_days)
+    risk_guard = resolve_guard(
+        _guard_payload, trading_date=trading_date,
+        expected_date=args.expected_date or None, stale_days=stale_days,
+        danger_info=danger_info, risk_info=risk_info, card_info=card_info,
+        v6_size=_size_guard, load_error=_guard_err)
+    if risk_guard.get("ok"):
+        print(f"🛡 浮盈保护: {risk_guard.get('state_label')}({risk_guard.get('score')}/8) "
+              f"· 已有浮盈 {risk_guard['existing']['text'][:40]} "
+              f"· 新仓上限 {risk_guard['new_entry']['ceiling_text']}", file=sys.stderr)
+    else:
+        print(f"⚠️ 浮盈保护不可用: {'；'.join(risk_guard.get('warnings') or [])}", file=sys.stderr)
+
     # ── 生成 HTML ──
     html = generate_html(trading_date, next_date, feat_date, price_date, model_ver,
                          temp_info, decay_info, temp_info["regime"], danger_info, stale_days, risk_info, preplan_info,
-                         emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
+                         emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info,
+                         risk_guard=risk_guard)
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
     html_path = os.path.join(REPORTS_DIR, f"v6_daily_{trading_date}.html")
@@ -1845,6 +1973,8 @@ def main():
                          "bands": {"low": _lo, "high": _hi}, "formula": _compo},
             "danger": danger_info,
             "index_risk": risk_info,
+            "risk_guard": risk_guard,
+            "risk_guard_error": _guard_err,
             "emotion": emotion_info,
             "wave": wave_info,
             "mainline": mainline_info,
@@ -1885,7 +2015,8 @@ def main():
     if args.print_msg:
         _msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info,
                                      danger_info, stale_days, risk_info, preplan_info,
-                                     emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
+                                     emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info,
+                                     risk_guard=risk_guard)
         print("\n" + "═" * 30 + " Telegram 消息预览 " + "═" * 30)
         print(_msg)
         print("═" * 76 + "\n")
@@ -1898,7 +2029,7 @@ def main():
                 print("⚠️ GitHub Pages 部署超时/失败，仍推送 Telegram（链接可能延迟）", file=sys.stderr)
         try:
             from notify.telegram_sender import send_single_message
-            msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
+            msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info, risk_guard=risk_guard)
             ok = send_single_message(msg, parse_mode="HTML")
             if ok:
                 print("✅ Telegram 已推送", file=sys.stderr)

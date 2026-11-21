@@ -10,6 +10,17 @@ v6_daily_pipeline.py — V6 日报生产管道
   python3 backtest/v6_daily_pipeline.py --telegram --deploy  # 完整流程+推送
 
 ── Changelog ──
+# 2026-09-15 Claude: 修复"静默失败" — 下游 stderr 全量分级回显(❌→ERROR / ⚠️→WARNING /
+#   其余→INFO)，并透传 v6_daily_report.py 的非零退出码。
+#   旧过滤器 `if "✅" in line or "温度" in line` 只回显成功行 → 失败行全丢，
+#   日志恒显绿。后果: 09-05~09-14 Telegram 401 + 09-14~ git push 401 静默 11 天。
+#   告警: 日志过滤器只能少回显成功，不可吞掉失败。
+# 2026-08-31 Claude: 凌晨排程改造(方案A) — 21:00刷新+22:30推送 → 01:30 全量管道
+#   cron: `0 21 --refresh-only` + `30 22 --report-only` 合并为 `30 1 v6_daily_pipeline.py --telegram --deploy`
+#   原因: 21:00 retrain_ml 与 Desktop 晚间使用并发 → 2026-08-31 OOM
+#   lag>1 → lag>=1: 01:30 期望=上一交易日, 特征滞后 1 天常态也触发刷新(否则空转)
+#   刷新后重查 check_freshness: 报告按刷新后状态判定 --asof 与滞后横幅
+#   语义变化: 日报 = 上一交易日数据, 次日 01:30 刷新 → 立即出报告推送(凌晨晨报)
 # 2026-08-03 Claude: 报告生成时统一自愈机制（覆盖完整数据依赖链）
 #   --report-only 新增: 数据滞后 → 自动补拉 → 重查 → 出报告
 #     链: stock_daily(fetch_all_stocks) → V4(retrain_ml --update) → V5(integrate_v5 --update)
@@ -40,6 +51,9 @@ V4_PATH = os.path.join(PROJECT_ROOT, "data_storage", "feature_matrix_v4.parquet"
 STOCK_DB = os.path.join(PROJECT_ROOT, "data_storage", "sw_index_data.db")
 MODEL_DIR = os.path.join(PROJECT_ROOT, "data_storage", "lgb_models")
 LOG_PATH = os.path.join(PROJECT_ROOT, "logs", "v6_pipeline.log")
+RISK_STATE_SCRIPT = os.path.join(PROJECT_ROOT, "analysis", "risk_state.py")
+RISK_STATE_CANON = os.path.join(PROJECT_ROOT, "data_storage", "risk_state.json")
+RISK_STATE_DASH = os.path.expanduser("~/projects/hermes-dashboard/risk_state.json")
 
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 logging.basicConfig(
@@ -263,6 +277,36 @@ def _run_retrain():
 # 主流程
 # ═══════════════════════════════════════════════════════════════
 
+def compute_risk_state(asof: str, expected: str | None, stale_days: int) -> bool:
+    """生成 risk_guard payload（canonical + 看板镜像）。
+
+    失败不阻断日报：v6_daily_report.py 会检测缺失/滞后并 fail-safe。
+    """
+    cmd = [
+        sys.executable, RISK_STATE_SCRIPT,
+        "--asof", str(asof),
+        "--out", RISK_STATE_CANON,
+        "--mirror", RISK_STATE_DASH,
+    ]
+    if expected:
+        cmd += ["--expected-date", str(expected)]
+    if stale_days:
+        cmd += ["--stale-days", str(stale_days)]
+    try:
+        r = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=180)
+        for line in (r.stdout or "").splitlines():
+            if line.strip():
+                logger.info("[risk_state] %s", line.strip())
+        if r.returncode != 0:
+            logger.warning("⚠️ 风险状态生成失败 (exit=%d): %s",
+                           r.returncode, (r.stderr or "").strip()[-400:])
+            return False
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("⚠️ 风险状态生成异常: %s", e)
+        return False
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="V6 日报生产管道")
@@ -287,13 +331,19 @@ def main():
     # ── Step 2: 刷新 ──
     if not args.report_only:
         logger.info("── 数据刷新 ──")
-        if status["feature_matrix"]["lag"] > 1:
+        # lag>=1: 01:30 凌晨运行时期望=上一交易日, 特征滞后 1 天也须触发刷新
+        # (原 lag>1 会漏掉"恰好滞后 1 个交易日"的常态, 导致凌晨空转、重活留给报告自愈)
+        if status["feature_matrix"]["lag"] >= 1:
             if not refresh_features():
                 logger.error("特征刷新失败，中止")
                 sys.exit(1)
         if not refresh_models():
             logger.error("模型刷新失败")
             # 不中止——用旧模型也能跑
+        # 刷新后重查新鲜度: 报告按刷新后的实际状态判定 --asof 与滞后横幅
+        status, warnings = check_freshness()
+        logger.info("刷新后新鲜度: stock_daily=%s feat=%s",
+                    status["stock_daily"]["date"], status["feature_matrix"]["date"])
     else:
         # --report-only: 统一自愈 —— 报告生成前若数据滞后，自动补拉再出报告
         # 完整依赖链: stock_daily → V4 → V5（refresh_features 内部按链补 V4）
@@ -325,11 +375,18 @@ def main():
     db_max = pd.read_sql("SELECT MAX(trade_date) as d FROM stock_daily", db)["d"][0]
     db.close()
 
-    cmd = [sys.executable, script, "--asof", str(db_max)]
     # 自愈后仍滞后 → 报告带"数据滞后 N 天"横幅（消费端自证，杜绝静默错数据）
     stale_days = max(status["stock_daily"]["lag"] or 0,
                      status["feature_matrix"]["lag"] or 0,
                      status["v4_matrix"]["lag"] or 0)
+    expected = status["stock_daily"].get("expected")
+    # 风险守卫：在报告之前算一次，canonical + 看板镜像；失败不阻断日报
+    compute_risk_state(db_max, expected, stale_days)
+
+    cmd = [sys.executable, script, "--asof", str(db_max),
+           "--risk-state", RISK_STATE_CANON]
+    if expected:
+        cmd += ["--expected-date", str(expected)]
     if stale_days > 0:
         cmd += ["--stale-days", str(stale_days)]
         logger.warning("⚠️ 自愈后仍滞后 %d 个交易日，报告将带数据滞后横幅", stale_days)
@@ -338,14 +395,32 @@ def main():
     if args.deploy:
         cmd.append("--deploy")
 
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        logger.error("日报生成失败: %s", result.stderr[-500:])
-        sys.exit(1)
+    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600)
 
+    # 2026-09-15 Claude: 全量回显下游 stderr，按标记分级。
+    #   旧逻辑 `if "✅" in line or "温度" in line` 只回显成功行 →
+    #   ❌ Telegram 推送失败 / ❌ git push 失败 全被丢弃，日志里只剩一片绿。
+    #   后果: 09-05~09-14 Telegram 401 静默失败 11 天才被发现（本次事故根因之一）。
+    #   教训: 日志过滤器只能"少回显成功"，不能"吞掉失败"。
     for line in result.stderr.split("\n"):
-        if "✅" in line or "温度" in line:
-            logger.info(line.strip())
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("❌"):
+            logger.error(line)
+        elif line.startswith("⚠️"):
+            logger.warning(line)
+        elif "失败" in line or "Error" in line or "错误" in line:
+            # 下游子模块未挂本管道 handler，裸 stderr 直出（如
+            # notify.telegram_sender 的 "Telegram 网络请求失败: HTTP Error 401"）
+            logger.warning(line)
+        else:
+            logger.info(line)
+
+    # 下游报告脚本在推送/部署通道失败时以非零退出（见 v6_daily_report.py 尾部）
+    if result.returncode != 0:
+        logger.error("日报生成失败 (exit=%d) — 见上方 ERROR 行", result.returncode)
+        sys.exit(1)
 
     logger.info("═" * 50)
     logger.info("管道完成 — %.0f 秒", time.time() - t0)
