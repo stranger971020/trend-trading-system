@@ -1479,16 +1479,16 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
 </div>
 
 {stale_html}
+{conclusion_html}
 {danger_html}
 {risk_html}
-{preplan_html}
-{conclusion_html}
-{card_html}
-{wave_html}
-{mainline_html}
-{team_html}
 {temp_html}
 {emotion_html}
+{preplan_html}
+{wave_html}
+{team_html}
+{mainline_html}
+{card_html}
 {decay_html}
 {rules_html}
 {strategy_html}
@@ -1520,10 +1520,100 @@ def _guard_tg_lines(view) -> list[str]:
     ne = view.get("new_entry") or {}
     head = (f"🛡 防守/已有浮盈: {_esc(view.get('state_label'))}（{view.get('score')}/8）"
             f" · {_esc(ex.get('text'))}")
-    tail = f"　新仓/总仓上限: {_esc(ne.get('ceiling_text'))}"
+    tail = f"🚪 新仓/总仓上限: {_esc(ne.get('ceiling_text'))}"
     if ne.get("divergence"):
         tail += f" · {_esc(ne['divergence'])}"
     return [head, tail]
+
+
+def _structure_telegram(lines: list[str]) -> list[str]:
+    """把既有的线性消息重排成「总览 → 大盘 → 行业 → 个股 → 执行/复盘」。
+
+    只重排，不删内容：未识别的行按当前 section 兜底保留。
+    """
+    total, market, industry, stocks, execu, head = [], [], [], [], [], []
+    cur = "market"
+    for ln in lines:
+        s = ln.lstrip()          # 只去前导空白（含全角空格），保留行本身
+        if not s:
+            continue
+        # 标题 / 警告置顶
+        if s.startswith("📊 <b>V6日报"):
+            head.append(ln)
+            continue
+        if s.startswith("⚠️ Bull+高温"):
+            market.append(ln)
+            cur = "market"
+            continue
+        if s.startswith("⚠️"):
+            head.append(ln)
+            continue
+        # 总览
+        if s.startswith(("🧭", "🛡", "①", "🚪", "📌")):
+            total.append(ln)
+            continue
+        # 一、大盘
+        if s.startswith(("🌡️", "📊 大盘风险", "🎭", "双轴", "🌊",
+                         "🏛️", "申购", "📈 盘中预案", "🟢 温度", "🔴 温度")):
+            market.append(ln)
+            cur = "market"
+            continue
+        # 二、行业
+        if s.startswith(("本阶段动作", "② 行业", "🚫", "🎯",
+                         "📉 衰减板块", "🟢 逆势板块")):
+            industry.append(ln)
+            cur = "industry"
+            continue
+        # 三、个股
+        if s.startswith("③ 个股候选"):
+            stocks.append(ln)
+            cur = "stocks"
+            continue
+        if cur == "stocks" and re.match(r"^\d+\.", s):
+            stocks.append(ln)
+            continue
+        if s.startswith(("🔻 最衰减", "🚀 最上升")):
+            stocks.append(ln)
+            cur = "stocks"
+            continue
+        # 四、执行与复盘
+        if s.startswith(("④ 出场", "⑤ 纪律", "📈 影子实盘", "🧪 引擎归因", "📄")):
+            execu.append(ln)
+            cur = "exec"
+            continue
+        # 兜底：保留原行，挂到当前 section
+        {"market": market, "industry": industry, "stocks": stocks,
+         "exec": execu}.get(cur, market).append(ln)
+
+    order = {"🧭": 0, "🛡": 1, "①": 2, "🚪": 3, "📌": 4}
+    total.sort(key=lambda x: next(
+        (v for k, v in order.items() if x.strip().startswith(k)), 9))
+    eorder = {"④": 0, "⑤": 1, "📈 影子实盘": 2, "🧪": 3, "📄": 4}
+    execu.sort(key=lambda x: next(
+        (v for k, v in eorder.items() if x.lstrip().startswith(k)), 9))
+
+    out: list[str] = []
+    if head:
+        out += head + [""]
+    out.append("<b>【总览】</b>")
+    out += total
+    out.append("")
+    out.append("<b>一、大盘</b>")
+    out += market
+    out.append("")
+    if industry:
+        out.append("<b>二、行业</b>")
+        out += industry
+        out.append("")
+    if stocks:
+        out.append("<b>三、个股</b>")
+        out += stocks
+        out.append("")
+    out.append("<b>四、执行与复盘</b>")
+    out += execu
+    while out and out[-1] == "":
+        out.pop()
+    return out
 
 
 def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None):
@@ -1575,7 +1665,7 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
     if risk_info and risk_info.get("level") in ("high", "extreme"):
         warn_prefix.append(f"⚠️ <b>大盘技术预警</b> · {risk_info['label']}风险（{risk_info['score']}/6）· {risk_info['advice']}")
     if warn_prefix:
-        lines[0:0] = warn_prefix + [""]
+        lines[1:1] = warn_prefix + [""]   # 标题之后、正文之前；不再压到标题上方
 
     # 常驻风险分一行（无论档位都显示）
     if risk_info:
@@ -1707,7 +1797,23 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
     lines.append("")
     lines.append(f'📄 <a href="{url}">完整报告</a>')
 
-    msg = "\n".join(lines)
+    # ── 总览（总分结构的「总」；细节仍保留在下方各段）──
+    _regime_disp = (_card or {}).get("regime", regime)
+    _risk_txt = (f"{risk_info['label']}（{risk_info['score']}/6）"
+                 if risk_info else "—")
+    _guard_ok = bool(risk_guard and risk_guard.get("ok"))
+    _guard_state = (f"{risk_guard.get('state_label')}（{risk_guard.get('score')}/8）"
+                    if _guard_ok else "不可用")
+    _overview = (f"🧭 市场: {_regime_disp} · 温度 {fmt_num(temp, 1)}/100 {level}"
+                 f" · 大盘风险 {_risk_txt} · 脆弱度 {_guard_state}")
+    if _guard_ok and risk_guard.get("state") in ("fragile", "crash"):
+        _priority = ("📌 优先级: 已有浮盈仓按防守层执行；新仓受上限约束，"
+                     "先看大盘是否企稳。")
+    else:
+        _priority = "📌 优先级: 按 V6 温度档与防守层执行；新仓不超过上限。"
+    lines.extend([_overview, _priority])
+
+    msg = "\n".join(_structure_telegram(lines))
     if len(msg) > 4000:
         print(f"⚠️ Telegram 消息超过 4000 字符（{len(msg)}），请检查是否需要拆分", file=sys.stderr)
     return msg

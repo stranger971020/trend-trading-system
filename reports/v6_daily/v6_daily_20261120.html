@@ -51,6 +51,11 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
 
 
 
+    <div class="conclusion" style="border-left-color:#16a34a">
+      <div class="conclusion-title" style="color:#16a34a">🎯 温度 4.0/100 · 低温 · range</div>
+      <div class="conclusion-sub">建议仓位: <b>3只 (半仓)</b> · 行业覆盖 ≥ 4 · 该配置历史 T+1 胜率 48.2% · D+5 胜率 50.9%</div>
+    </div>
+
     <div style="margin:16px 0 20px;padding:14px 16px;border:2px solid #dc2626;border-left:6px solid #dc2626;border-radius:10px;background:#fef2f2;color:#991b1b">
       <div style="font-weight:800;font-size:1.05rem">⚠️ 市场脆弱度 · ⛔ 市场脆弱：高度谨慎</div>
       <div style="margin-top:6px;font-size:.85rem;line-height:1.6">
@@ -79,113 +84,6 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
       </div>
       <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569">
         > 多项技术破位, 建议 ≤50% 仓位
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">📈 明日盘中预案 <span style="font-weight:400;color:#94a3b8">(盘中确认后行动)</span></div>
-      <div style="font-size:.78rem;color:#64748b;margin-bottom:8px">
-        若明日盘中出现以下条件 → 立即执行对应动作。回测口径: 2015-01-05 ~ 2026-08-19, 2826 交易日，事件: 当日收盘大跌: 上证≤-2.5% 或 深成/创业板≤-4% (109 天, 基线 3.9%)
-      </div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr style="background:#f1f5f9">
-          <th style="padding:6px 8px;text-align:left;width:28%">预案</th>
-          <th style="padding:6px 8px;text-align:left">触发条件 / 动作</th>
-          <th style="padding:6px 8px;text-align:left;width:24%">历史表现</th>
-        </tr>
-        <tr>
-              <td style="font-size:.8rem;font-weight:600">1. 弱势指数开盘低开≥2.5%</td>
-              <td style="font-size:.78rem;color:#475569">开盘(9:30 可判): min(深成,创业板) 低开 ≤ -2.5%<br><span style="color:#94a3b8">动作: <b>开盘即降仓</b></span></td>
-              <td style="font-size:.78rem;color:#475569">命中 62% / 误报 38%<br><span style="color:#94a3b8">触发 40 次 · lift 16.2</span></td>
-            </tr><tr>
-              <td style="font-size:.8rem;font-weight:600">2. 弱势指数盘中触及 -4%</td>
-              <td style="font-size:.78rem;color:#475569">盘中任意时刻: min(深成,创业板) 盘中最低 ≤ -4.0%<br><span style="color:#94a3b8">动作: <b>止损 / 进一步减仓</b></span></td>
-              <td style="font-size:.78rem;color:#475569">命中 70% / 误报 30%<br><span style="color:#94a3b8">触发 132 次 · lift 18.3</span></td>
-            </tr>
-      </table>
-      <div style="margin-top:8px;padding:8px 10px;background:#f8fafc;border-radius:6px;font-size:.75rem;color:#94a3b8;line-height:1.6">
-        预案是『盘中确认后行动』的触发器, 非收盘预测。触发意味着当日收大跌概率显著升高但仍有误报(约3-4成), 故建议『降仓』而非『清仓』——误报成本是少赚一点反弹。信号无 lookahead: 开盘预案用 open/昨收, 盘中预案用当日 low, 事件用当日收盘。
-      </div>
-    </div>
-
-    <div class="conclusion" style="border-left-color:#16a34a">
-      <div class="conclusion-title" style="color:#16a34a">🎯 温度 4.0/100 · 低温 · range</div>
-      <div class="conclusion-sub">建议仓位: <b>3只 (半仓)</b> · 行业覆盖 ≥ 4 · 该配置历史 T+1 胜率 48.2% · D+5 胜率 50.9%</div>
-    </div>
-
-<div class="conclusion" style="border-left-color:#0ea5e9">
-  <div class="conclusion-title">🎯 波段决策单（100-500亿域）</div>
-  <div class="conclusion-sub">① 阶段 <b>过冷/恐慌</b> · 标准口径 技术性熊市·年线+半年线下方
-     · 进攻/新仓仓位 <b>30-50%（试探建仓）</b> · 历史超额 +2.71%/月(相对胜率100%)</div>
-  <div style="font-size:.8rem;color:#64748b;margin-top:4px">
-    进攻/新仓建议见本节；已有浮盈仓动作见下方「🛡 防守层」子块。
-  </div>
-  <div style="font-size:.84rem;margin-top:8px">
-    ② 行业 ○ 全行业（本阶段行业筛选无增益）
-    <br>&nbsp;&nbsp;&nbsp;🚫 回避: 航运港口、调味发酵品Ⅱ、房屋建设Ⅱ、小家电、白酒Ⅱ、保险Ⅱ</div>
-  <table class="data-table" style="margin-top:10px"><thead><tr>
-    <th>#</th><th>名称</th><th>代码</th><th>市值</th><th>P≧20%</th><th>预期</th></tr></thead>
-    <tbody><tr><td>1</td><td>杰华特</td><td>688141.SH</td><td>253亿</td><td>60%</td><td>+17.2%</td></tr><tr><td>2</td><td>长江通信</td><td>600345.SH</td><td>105亿</td><td>54%</td><td>+16.9%</td></tr><tr><td>3</td><td>精测电子</td><td>300567.SZ</td><td>260亿</td><td>56%</td><td>+16.8%</td></tr><tr><td>4</td><td>信科移动</td><td>688387.SH</td><td>302亿</td><td>51%</td><td>+16.6%</td></tr><tr><td>5</td><td>科翔股份</td><td>300903.SZ</td><td>244亿</td><td>56%</td><td>+15.9%</td></tr><tr><td>6</td><td>冰轮环境</td><td>000811.SZ</td><td>190亿</td><td>48%</td><td>+15.6%</td></tr><tr><td>7</td><td>骄成超声</td><td>688392.SH</td><td>109亿</td><td>54%</td><td>+15.5%</td></tr><tr><td>8</td><td>四方达</td><td>300179.SZ</td><td>101亿</td><td>50%</td><td>+15.3%</td></tr></tbody></table>
-  
-  
-  <div style="margin-top:12px;padding:10px 12px;border-left:3px solid #7c3aed;background:#faf5ff">
-    <div style="font-weight:600;color:#6d28d9">🛡 浮盈保护 · 防守层（适用对象：已有浮盈仓）</div>
-    <div style="font-size:.82rem;color:#64748b;margin-top:2px">状态 <b>崩跌</b>
-      · 脆弱度 6/8 · 基准 20261120</div>
-    <div style="font-size:.84rem;margin-top:6px">
-      ✂️ 已有浮盈仓：前日建议初减 50%；若已执行，今日不重复；若未执行，今日补执行。剩余仓位执行 8% 移动止损<br>
-      🧱 新仓/总仓上限：<b>≤15%（脆弱度 danger）</b><br>
-      
-      <span style="color:#64748b">进攻/新仓建议见上方温度档与决策单；本块只处理已有浮盈/当前持仓，不覆盖 V6 进攻层。</span><br>
-      <span style="color:#94a3b8">口径：初减=已有浮盈仓比例；上限=新仓/总仓占总资金比例。</span>
-    </div>
-  </div>
-  <div style="font-size:.82rem;margin-top:10px;color:#475569">
-    ④ 出场(已有浮盈): 先按上条初减，剩余仓位自持有期最高收盘回撤8%即减/退 · 浮亏-10%止损<br>
-    ⑤ 纪律: 首仓≤1/3 · 同股间隔≥20日 · 单票≤25% · 行业≥4</div>
-</div>
-
-    <div class="section">
-      <div class="section-title">🌊 主升浪雷达 <span style="font-weight:400;color:#94a3b8">(波段层 · ZigZag 摆动)</span></div>
-      <table class="data-table"><thead><tr><th>指数</th><th>状态</th><th>距腿低点</th><th>距腿内高点</th><th>本腿</th></tr></thead>
-      <tbody><tr><td>沪深300<span style='color:#94a3b8;font-size:.72rem'> 000300.SH</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-21.8%</td><td>-21.8%</td><td>103日</td></tr><tr><td>上证<span style='color:#94a3b8;font-size:.72rem'> 000001.SH</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-16.7%</td><td>-16.7%</td><td>130日</td></tr><tr><td>创业板<span style='color:#94a3b8;font-size:.72rem'> 399006.SZ</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-40.8%</td><td>-40.8%</td><td>63日</td></tr></tbody></table>
-      <div style="margin-top:14px;font-size:.82rem;font-weight:600;color:#64748b;margin-bottom:6px">历史主升浪(≥20%)参考</div>
-      <table class="data-table"><thead><tr><th>指数</th><th>频率</th><th>幅度中位</th><th>持续中位</th></tr></thead>
-      <tbody><tr><td>沪深300</td><td>0.73 次/年</td><td>+41%</td><td>187 天</td></tr><tr><td>上证</td><td>0.64 次/年</td><td>+34%</td><td>122 天</td></tr><tr><td>创业板</td><td>1.09 次/年</td><td>+39%</td><td>73 天</td></tr></tbody></table>
-      <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569;line-height:1.7">
-        &gt; <b>波段操作框架</b>（回测支撑，见 entry_style_validation_report.md）：<br>
-        · 指数级主升浪仅 <b>0.6-1.1 次/年</b> → 抓 2-3 次必须下沉到<b>行业/个股</b>；<br>
-        · 左侧(超跌)信号胜率并不低于右侧(沪深300 左侧56% vs 右侧41%) → <b>左侧本身不是错，无纪律才是</b>；<br>
-        · 左侧信号后平均还要再跌 <b>约10%</b>、<b>3-6周</b>才见底 → 首仓务必轻、必须分批；<br>
-        · 分批 vs 一次：总收益接近，但分批<b>浮亏更浅(-6.6% vs -9.2%)、胜率更高(65% vs 56%)</b>。
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">🎯 主线雷达 <span style="font-weight:400;color:#94a3b8">(申万L2 · 选池层)</span></div>
-      <table class="data-table"><thead><tr><th>行业</th><th>主线分</th><th>强度5日</th><th>强度20日</th><th>广度5日</th><th>只数</th></tr></thead>
-      <tbody><tr><td>国有大型银行Ⅱ</td><td>99</td><td>+5.3%</td><td>+10.2%</td><td>100%</td><td>6</td></tr><tr><td>股份制银行Ⅱ</td><td>99</td><td>+1.9%</td><td>+8.9%</td><td>100%</td><td>8</td></tr><tr><td>白色家电</td><td>98</td><td>+4.8%</td><td>+10.3%</td><td>83%</td><td>6</td></tr><tr><td>城商行Ⅱ</td><td>98</td><td>+1.3%</td><td>+8.3%</td><td>60%</td><td>15</td></tr><tr><td>农商行Ⅱ</td><td>97</td><td>-2.3%</td><td>+3.2%</td><td>0%</td><td>8</td></tr><tr><td>航空机场</td><td>96</td><td>+1.1%</td><td>+5.8%</td><td>67%</td><td>3</td></tr><tr><td>铁路公路</td><td>95</td><td>-1.1%</td><td>+2.9%</td><td>31%</td><td>29</td></tr><tr><td>保险Ⅱ</td><td>95</td><td>+1.4%</td><td>+2.7%</td><td>80%</td><td>5</td></tr><tr><td>房屋建设Ⅱ</td><td>93</td><td>-1.2%</td><td>-1.8%</td><td>50%</td><td>4</td></tr><tr><td>调味发酵品Ⅱ</td><td>92</td><td>+1.6%</td><td>-3.5%</td><td>62%</td><td>8</td></tr></tbody></table>
-      <div style="margin-top:12px;padding:12px;background:#fff7ed;border-radius:8px;font-size:.84rem;color:#7c2d12;line-height:1.7">
-        ⚠️ <b>主线是「选池」，不是「入场信号」</b>。回测（10.4M 样本）显示：<br>
-        · 板块动量对"未来10日个股≥30%"<b>几乎无预测力</b>（基线 1.1% → 最优信号 1.6%）；<br>
-        · 真正的 30% 来源是<b>连板</b>：连板≥3 未来10日内摸到 +30% 的概率 <b>49.4%</b>（15.5x），连板≥2 为 36.1%；<br>
-        · 但连板≥3 的<b>收盘</b>涨幅中位仅 +5.9% vs 区间最高 +29.2% → <b>波动极大，卖出纪律决定实际收益</b>。
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">🏛️ 国家队雷达 <span style="font-weight:400;color:#94a3b8">(平准基金进出场 · ETF份额×点位×杠杆交叉验证 · 数据截至 20261120)</span></div>
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-        <div style="font-size:1.5rem;font-weight:800;color:#16a34a">🟢 入场信号</div>
-        <div style="font-size:.9rem;color:#64748b">置信度: <b>medium</b></div>
-      </div>
-      <table class="data-table"><thead><tr><th>核心宽基ETF</th><th>申赎方向(连续日)</th><th>单日偏离(20日基线)</th><th>累计幅度(份额%)</th></tr></thead>
-      <tbody><tr><td>华泰柏瑞沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#16a34a'>+2.6σ</td><td style='color:#16a34a'>5日 +21.0%</td></tr><tr><td>易方达沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#475569'>+0.8</td><td style='color:#16a34a'>5日 +10.1%</td></tr><tr><td>华夏沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#475569'>-0.4</td><td style='color:#16a34a'>5日 +29.6%</td></tr><tr><td>嘉实沪深300ETF</td><td style='color:#94a3b8;font-weight:600'>—</td><td style='color:#16a34a'>+9.2σ</td><td style='color:#16a34a'>3日 +51.9%</td></tr><tr><td>华夏上证50ETF</td><td style='color:#16a34a;font-weight:600'>申购3连</td><td style='color:#16a34a'>+8.9σ</td><td style='color:#16a34a'>3日 +46.6%</td></tr><tr><td>南方中证500ETF</td><td style='color:#94a3b8;font-weight:600'>—</td><td style='color:#16a34a'>+2.4σ</td><td style='color:#16a34a'>3日 +28.2%</td></tr><tr><td>南方中证1000ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#16a34a'>+2.4σ</td><td style='color:#16a34a'>5日 +40.1%</td></tr><tr><td>华夏中证1000ETF</td><td style='color:#dc2626;font-weight:600'>赎回7连</td><td style='color:#475569'>-0.2</td><td style='color:#dc2626'>7日 -43.4%</td></tr></tbody></table>
-      <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569;line-height:1.8">
-        ▸ 行业ETF对冲申购≥3日: <b>创业板ETF</b>（有→调仓特征, 非离场）<br>
-        ▸ 调仓校验: 行业申购 177.8亿 ÷ 宽基赎回 18.5亿 = 962%（阈值50%） → 调仓特征<br>
-        ▸ 沪深300 <b>3954.57</b> | 60日区间 0.0% (低位区) | 5日 -1.54%<br>
-        ▸ 融资余额 <b>11121.0</b>亿 | 5日降(-50.52%)
       </div>
     </div>
 
@@ -244,6 +142,108 @@ body{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-ser
         口径: 涨停=收盘封板(主板10%/创业板·科创板20%); 封板率=封板数/曾涨停数; 晋级率=昨日涨停今日仍涨停占比。方向经 2636 交易日回测(情绪过热→未来偏弱)。
       </div>
     </div>
+
+    <div class="section">
+      <div class="section-title">📈 明日盘中预案 <span style="font-weight:400;color:#94a3b8">(盘中确认后行动)</span></div>
+      <div style="font-size:.78rem;color:#64748b;margin-bottom:8px">
+        若明日盘中出现以下条件 → 立即执行对应动作。回测口径: 2015-01-05 ~ 2026-08-19, 2826 交易日，事件: 当日收盘大跌: 上证≤-2.5% 或 深成/创业板≤-4% (109 天, 基线 3.9%)
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <tr style="background:#f1f5f9">
+          <th style="padding:6px 8px;text-align:left;width:28%">预案</th>
+          <th style="padding:6px 8px;text-align:left">触发条件 / 动作</th>
+          <th style="padding:6px 8px;text-align:left;width:24%">历史表现</th>
+        </tr>
+        <tr>
+              <td style="font-size:.8rem;font-weight:600">1. 弱势指数开盘低开≥2.5%</td>
+              <td style="font-size:.78rem;color:#475569">开盘(9:30 可判): min(深成,创业板) 低开 ≤ -2.5%<br><span style="color:#94a3b8">动作: <b>开盘即降仓</b></span></td>
+              <td style="font-size:.78rem;color:#475569">命中 62% / 误报 38%<br><span style="color:#94a3b8">触发 40 次 · lift 16.2</span></td>
+            </tr><tr>
+              <td style="font-size:.8rem;font-weight:600">2. 弱势指数盘中触及 -4%</td>
+              <td style="font-size:.78rem;color:#475569">盘中任意时刻: min(深成,创业板) 盘中最低 ≤ -4.0%<br><span style="color:#94a3b8">动作: <b>止损 / 进一步减仓</b></span></td>
+              <td style="font-size:.78rem;color:#475569">命中 70% / 误报 30%<br><span style="color:#94a3b8">触发 132 次 · lift 18.3</span></td>
+            </tr>
+      </table>
+      <div style="margin-top:8px;padding:8px 10px;background:#f8fafc;border-radius:6px;font-size:.75rem;color:#94a3b8;line-height:1.6">
+        预案是『盘中确认后行动』的触发器, 非收盘预测。触发意味着当日收大跌概率显著升高但仍有误报(约3-4成), 故建议『降仓』而非『清仓』——误报成本是少赚一点反弹。信号无 lookahead: 开盘预案用 open/昨收, 盘中预案用当日 low, 事件用当日收盘。
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🌊 主升浪雷达 <span style="font-weight:400;color:#94a3b8">(波段层 · ZigZag 摆动)</span></div>
+      <table class="data-table"><thead><tr><th>指数</th><th>状态</th><th>距腿低点</th><th>距腿内高点</th><th>本腿</th></tr></thead>
+      <tbody><tr><td>沪深300<span style='color:#94a3b8;font-size:.72rem'> 000300.SH</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-21.8%</td><td>-21.8%</td><td>103日</td></tr><tr><td>上证<span style='color:#94a3b8;font-size:.72rem'> 000001.SH</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-16.7%</td><td>-16.7%</td><td>130日</td></tr><tr><td>创业板<span style='color:#94a3b8;font-size:.72rem'> 399006.SZ</span></td><td style='color:#dc2626;font-weight:700'>回调中</td><td>-40.8%</td><td>-40.8%</td><td>63日</td></tr></tbody></table>
+      <div style="margin-top:14px;font-size:.82rem;font-weight:600;color:#64748b;margin-bottom:6px">历史主升浪(≥20%)参考</div>
+      <table class="data-table"><thead><tr><th>指数</th><th>频率</th><th>幅度中位</th><th>持续中位</th></tr></thead>
+      <tbody><tr><td>沪深300</td><td>0.73 次/年</td><td>+41%</td><td>187 天</td></tr><tr><td>上证</td><td>0.64 次/年</td><td>+34%</td><td>122 天</td></tr><tr><td>创业板</td><td>1.09 次/年</td><td>+39%</td><td>73 天</td></tr></tbody></table>
+      <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569;line-height:1.7">
+        &gt; <b>波段操作框架</b>（回测支撑，见 entry_style_validation_report.md）：<br>
+        · 指数级主升浪仅 <b>0.6-1.1 次/年</b> → 抓 2-3 次必须下沉到<b>行业/个股</b>；<br>
+        · 左侧(超跌)信号胜率并不低于右侧(沪深300 左侧56% vs 右侧41%) → <b>左侧本身不是错，无纪律才是</b>；<br>
+        · 左侧信号后平均还要再跌 <b>约10%</b>、<b>3-6周</b>才见底 → 首仓务必轻、必须分批；<br>
+        · 分批 vs 一次：总收益接近，但分批<b>浮亏更浅(-6.6% vs -9.2%)、胜率更高(65% vs 56%)</b>。
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🏛️ 国家队雷达 <span style="font-weight:400;color:#94a3b8">(平准基金进出场 · ETF份额×点位×杠杆交叉验证 · 数据截至 20261120)</span></div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="font-size:1.5rem;font-weight:800;color:#16a34a">🟢 入场信号</div>
+        <div style="font-size:.9rem;color:#64748b">置信度: <b>medium</b></div>
+      </div>
+      <table class="data-table"><thead><tr><th>核心宽基ETF</th><th>申赎方向(连续日)</th><th>单日偏离(20日基线)</th><th>累计幅度(份额%)</th></tr></thead>
+      <tbody><tr><td>华泰柏瑞沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#16a34a'>+2.6σ</td><td style='color:#16a34a'>5日 +21.0%</td></tr><tr><td>易方达沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#475569'>+0.8</td><td style='color:#16a34a'>5日 +10.1%</td></tr><tr><td>华夏沪深300ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#475569'>-0.4</td><td style='color:#16a34a'>5日 +29.6%</td></tr><tr><td>嘉实沪深300ETF</td><td style='color:#94a3b8;font-weight:600'>—</td><td style='color:#16a34a'>+9.2σ</td><td style='color:#16a34a'>3日 +51.9%</td></tr><tr><td>华夏上证50ETF</td><td style='color:#16a34a;font-weight:600'>申购3连</td><td style='color:#16a34a'>+8.9σ</td><td style='color:#16a34a'>3日 +46.6%</td></tr><tr><td>南方中证500ETF</td><td style='color:#94a3b8;font-weight:600'>—</td><td style='color:#16a34a'>+2.4σ</td><td style='color:#16a34a'>3日 +28.2%</td></tr><tr><td>南方中证1000ETF</td><td style='color:#16a34a;font-weight:600'>申购5连</td><td style='color:#16a34a'>+2.4σ</td><td style='color:#16a34a'>5日 +40.1%</td></tr><tr><td>华夏中证1000ETF</td><td style='color:#dc2626;font-weight:600'>赎回7连</td><td style='color:#475569'>-0.2</td><td style='color:#dc2626'>7日 -43.4%</td></tr></tbody></table>
+      <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569;line-height:1.8">
+        ▸ 行业ETF对冲申购≥3日: <b>创业板ETF</b>（有→调仓特征, 非离场）<br>
+        ▸ 调仓校验: 行业申购 177.8亿 ÷ 宽基赎回 18.5亿 = 962%（阈值50%） → 调仓特征<br>
+        ▸ 沪深300 <b>3954.57</b> | 60日区间 0.0% (低位区) | 5日 -1.54%<br>
+        ▸ 融资余额 <b>11121.0</b>亿 | 5日降(-50.52%)
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🎯 主线雷达 <span style="font-weight:400;color:#94a3b8">(申万L2 · 选池层)</span></div>
+      <table class="data-table"><thead><tr><th>行业</th><th>主线分</th><th>强度5日</th><th>强度20日</th><th>广度5日</th><th>只数</th></tr></thead>
+      <tbody><tr><td>国有大型银行Ⅱ</td><td>99</td><td>+5.3%</td><td>+10.2%</td><td>100%</td><td>6</td></tr><tr><td>股份制银行Ⅱ</td><td>99</td><td>+1.9%</td><td>+8.9%</td><td>100%</td><td>8</td></tr><tr><td>白色家电</td><td>98</td><td>+4.8%</td><td>+10.3%</td><td>83%</td><td>6</td></tr><tr><td>城商行Ⅱ</td><td>98</td><td>+1.3%</td><td>+8.3%</td><td>60%</td><td>15</td></tr><tr><td>农商行Ⅱ</td><td>97</td><td>-2.3%</td><td>+3.2%</td><td>0%</td><td>8</td></tr><tr><td>航空机场</td><td>96</td><td>+1.1%</td><td>+5.8%</td><td>67%</td><td>3</td></tr><tr><td>铁路公路</td><td>95</td><td>-1.1%</td><td>+2.9%</td><td>31%</td><td>29</td></tr><tr><td>保险Ⅱ</td><td>95</td><td>+1.4%</td><td>+2.7%</td><td>80%</td><td>5</td></tr><tr><td>房屋建设Ⅱ</td><td>93</td><td>-1.2%</td><td>-1.8%</td><td>50%</td><td>4</td></tr><tr><td>调味发酵品Ⅱ</td><td>92</td><td>+1.6%</td><td>-3.5%</td><td>62%</td><td>8</td></tr></tbody></table>
+      <div style="margin-top:12px;padding:12px;background:#fff7ed;border-radius:8px;font-size:.84rem;color:#7c2d12;line-height:1.7">
+        ⚠️ <b>主线是「选池」，不是「入场信号」</b>。回测（10.4M 样本）显示：<br>
+        · 板块动量对"未来10日个股≥30%"<b>几乎无预测力</b>（基线 1.1% → 最优信号 1.6%）；<br>
+        · 真正的 30% 来源是<b>连板</b>：连板≥3 未来10日内摸到 +30% 的概率 <b>49.4%</b>（15.5x），连板≥2 为 36.1%；<br>
+        · 但连板≥3 的<b>收盘</b>涨幅中位仅 +5.9% vs 区间最高 +29.2% → <b>波动极大，卖出纪律决定实际收益</b>。
+      </div>
+    </div>
+
+<div class="conclusion" style="border-left-color:#0ea5e9">
+  <div class="conclusion-title">🎯 波段决策单（100-500亿域）</div>
+  <div class="conclusion-sub">① 阶段 <b>过冷/恐慌</b> · 标准口径 技术性熊市·年线+半年线下方
+     · 进攻/新仓仓位 <b>30-50%（试探建仓）</b> · 历史超额 +2.71%/月(相对胜率100%)</div>
+  <div style="font-size:.8rem;color:#64748b;margin-top:4px">
+    进攻/新仓建议见本节；已有浮盈仓动作见下方「🛡 防守层」子块。
+  </div>
+  <div style="font-size:.84rem;margin-top:8px">
+    ② 行业 ○ 全行业（本阶段行业筛选无增益）
+    <br>&nbsp;&nbsp;&nbsp;🚫 回避: 航运港口、调味发酵品Ⅱ、房屋建设Ⅱ、小家电、白酒Ⅱ、保险Ⅱ</div>
+  <table class="data-table" style="margin-top:10px"><thead><tr>
+    <th>#</th><th>名称</th><th>代码</th><th>市值</th><th>P≧20%</th><th>预期</th></tr></thead>
+    <tbody><tr><td>1</td><td>杰华特</td><td>688141.SH</td><td>253亿</td><td>60%</td><td>+17.2%</td></tr><tr><td>2</td><td>长江通信</td><td>600345.SH</td><td>105亿</td><td>54%</td><td>+16.9%</td></tr><tr><td>3</td><td>精测电子</td><td>300567.SZ</td><td>260亿</td><td>56%</td><td>+16.8%</td></tr><tr><td>4</td><td>信科移动</td><td>688387.SH</td><td>302亿</td><td>51%</td><td>+16.6%</td></tr><tr><td>5</td><td>科翔股份</td><td>300903.SZ</td><td>244亿</td><td>56%</td><td>+15.9%</td></tr><tr><td>6</td><td>冰轮环境</td><td>000811.SZ</td><td>190亿</td><td>48%</td><td>+15.6%</td></tr><tr><td>7</td><td>骄成超声</td><td>688392.SH</td><td>109亿</td><td>54%</td><td>+15.5%</td></tr><tr><td>8</td><td>四方达</td><td>300179.SZ</td><td>101亿</td><td>50%</td><td>+15.3%</td></tr></tbody></table>
+  
+  
+  <div style="margin-top:12px;padding:10px 12px;border-left:3px solid #7c3aed;background:#faf5ff">
+    <div style="font-weight:600;color:#6d28d9">🛡 浮盈保护 · 防守层（适用对象：已有浮盈仓）</div>
+    <div style="font-size:.82rem;color:#64748b;margin-top:2px">状态 <b>崩跌</b>
+      · 脆弱度 6/8 · 基准 20261120</div>
+    <div style="font-size:.84rem;margin-top:6px">
+      ✂️ 已有浮盈仓：前日建议初减 50%；若已执行，今日不重复；若未执行，今日补执行。剩余仓位执行 8% 移动止损<br>
+      🧱 新仓/总仓上限：<b>≤15%（脆弱度 danger）</b><br>
+      
+      <span style="color:#64748b">进攻/新仓建议见上方温度档与决策单；本块只处理已有浮盈/当前持仓，不覆盖 V6 进攻层。</span><br>
+      <span style="color:#94a3b8">口径：初减=已有浮盈仓比例；上限=新仓/总仓占总资金比例。</span>
+    </div>
+  </div>
+  <div style="font-size:.82rem;margin-top:10px;color:#475569">
+    ④ 出场(已有浮盈): 先按上条初减，剩余仓位自持有期最高收盘回撤8%即减/退 · 浮亏-10%止损<br>
+    ⑤ 纪律: 首仓≤1/3 · 同股间隔≥20日 · 单票≤25% · 行业≥4</div>
+</div>
 
     <div class="section">
       <div class="section-title">📉 Alpha Decay 全市场衰减榜</div>
