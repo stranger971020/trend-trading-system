@@ -1835,6 +1835,23 @@ def _redact(s: str) -> str:
     return s
 
 
+def _url_ok(url: str, timeout_s: int = 15, attempts: int = 3) -> bool:
+    """完整报告链接是否真的可访问（HTTP 200）。Telegram 发送前的硬闸门。"""
+    import time as _time
+    import urllib.request
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+                if r.status == 200:
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        if i + 1 < attempts:
+            _time.sleep(2)
+    return False
+
+
 def _wait_for_pages_deploy(commit_sha: str, timeout_s: int = 600, poll_s: int = 15) -> bool:
     """等待 GitHub Pages Actions 部署完成（2026-08-06: 部署成功后再推 Telegram，保证链接可用）。
 
@@ -2126,25 +2143,34 @@ def main():
         print("\n" + "═" * 30 + " Telegram 消息预览 " + "═" * 30)
         print(_msg)
         print("═" * 76 + "\n")
+    link_url = f"{GITHUB_BASE}/v6_daily_{trading_date}.html"
+    if args.print_msg and not _url_ok(link_url):
+        print(f"⚠️ 完整报告链接当前不可访问: {link_url}", file=sys.stderr)
     if args.telegram:
         if deployed_sha:
             deploy_ok = _wait_for_pages_deploy(deployed_sha, timeout_s=600)
             if deploy_ok:
                 print("✅ GitHub Pages 部署成功，推送 Telegram", file=sys.stderr)
             else:
-                print("⚠️ GitHub Pages 部署超时/失败，仍推送 Telegram（链接可能延迟）", file=sys.stderr)
-        try:
-            from notify.telegram_sender import send_single_message
-            msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info, risk_guard=risk_guard)
-            ok = send_single_message(msg, parse_mode="HTML")
-            if ok:
-                print("✅ Telegram 已推送", file=sys.stderr)
-            else:
-                pushed_failed = True
-                print("❌ Telegram 推送失败", file=sys.stderr)
-        except Exception as e:
+                print("⚠️ GitHub Pages 部署超时/失败，继续做链接硬检查", file=sys.stderr)
+        # 硬闸门：链接不是 200 就不推送，避免发出 404 链接（2026-11-22 事故）
+        if not _url_ok(link_url):
             pushed_failed = True
-            print(f"❌ Telegram 异常: {_redact(str(e))}", file=sys.stderr)
+            print(f"❌ 完整报告链接不可访问（{link_url}）— 跳过 Telegram 推送；请先 --deploy",
+                  file=sys.stderr)
+        else:
+            try:
+                from notify.telegram_sender import send_single_message
+                msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info, risk_guard=risk_guard)
+                ok = send_single_message(msg, parse_mode="HTML")
+                if ok:
+                    print("✅ Telegram 已推送", file=sys.stderr)
+                else:
+                    pushed_failed = True
+                    print("❌ Telegram 推送失败", file=sys.stderr)
+            except Exception as e:
+                pushed_failed = True
+                print(f"❌ Telegram 异常: {_redact(str(e))}", file=sys.stderr)
 
     # 2026-09-15 Claude: 推送通道失败必须反映到退出码。
     #   背景: 09-05~09-14 Telegram 401 静默失败 11 天 — 旧版此处恒 exit 0，
