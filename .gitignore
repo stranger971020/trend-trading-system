@@ -11,3 +11,7 @@ venv/
 
 # V6 日报结构化摘要 JSON（本地跨系统消费，不公开）
 reports/v6_daily/*.json
+
+# 重放派生池子缓存（源数据变化自动重建，不入库）
+backtest/cache/pool_*.parquet
+backtest/cache/pool_*.meta.json

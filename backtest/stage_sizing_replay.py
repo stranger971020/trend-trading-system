@@ -25,6 +25,7 @@ import json
 import os
 import sqlite3
 import sys
+from datetime import datetime
 
 import pandas as pd
 
@@ -93,7 +94,7 @@ def _clean_mean(row: pd.Series) -> float:
     return float(s.mean()) if len(s) >= 20 else float("nan")
 
 
-def pool_all_equal_weight(regime: pd.Series | None = None) -> pd.DataFrame:
+def _build_all_ew() -> pd.DataFrame:
     """P2 全A等权: 每月末截面的个股月收益 → 去硬错误后等权平均。
 
     ‼️ 口径（重要）：这是**月度再平衡的买入持有**（可实现）。
@@ -135,7 +136,64 @@ def _prev_trading(all_dates: list[str], d: str | None) -> str | None:
     return prev[-1] if prev else None
 
 
-def pool_cap_band(lo=CAP_LO, hi=CAP_HI) -> pd.DataFrame:
+# ────────────────────────── 池子缓存（2026-11-21） ──────────────────────────
+# 动机: 池子构建要读 900 万行 stock_daily（P1 约 3-4 分钟）。改报告层/判定逻辑时
+# 反复重读纯属浪费 —— 池子只依赖源数据与筛池参数，缓存它。
+# 失效条件: stock_daily 最新交易日 / 行数 / mktcap_cache mtime / 参数 任一变化。
+
+def _src_fingerprint(start: str) -> str:
+    conn = sqlite3.connect(DB)
+    try:
+        mx, cnt = conn.execute(
+            "SELECT MAX(trade_date), COUNT(*) FROM stock_daily WHERE trade_date>=?", (start,)).fetchone()
+    finally:
+        conn.close()
+    mc = int(os.path.getmtime(MKTCAP)) if os.path.exists(MKTCAP) else 0
+    return f"{mx}|{cnt}|{mc}"
+
+
+def _cached_pool(name: str, builder, fp: str, force: bool = False) -> pd.DataFrame:
+    path = os.path.join(CACHE_DIR, name + ".parquet")
+    meta = path + ".meta.json"
+    if not force and os.path.exists(path) and os.path.exists(meta):
+        try:
+            with open(meta, encoding="utf-8") as f:
+                m = json.load(f)
+            if m.get("fingerprint") == fp:
+                df = pd.read_parquet(path)
+                print(f"[pool] 缓存命中 {name} · {len(df)} 期 · 建于 {m.get('built_at')}",
+                      file=sys.stderr)
+                return df
+            print(f"[pool] {name} 指纹变化，重建", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            print(f"[pool] 缓存不可用({e})，重建 {name}", file=sys.stderr)
+    print(f"[pool] 构建 {name} …", file=sys.stderr)
+    df = builder()
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        df.to_parquet(path)
+        with open(meta, "w", encoding="utf-8") as f:
+            json.dump({"fingerprint": fp, "built_at": datetime.now().isoformat(timespec="seconds"),
+                       "rows": int(len(df))}, f, ensure_ascii=False)
+        print(f"[pool] 已缓存 {name} · {len(df)} 期 → {path}", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001
+        print(f"[pool] 缓存写入失败(忽略，不影响结果): {e}", file=sys.stderr)
+    return df
+
+
+def pool_all_equal_weight(regime: pd.Series | None = None, force: bool = False) -> pd.DataFrame:
+    """P2 全A等权（带缓存）。口径见 _build_all_ew。"""
+    return _cached_pool("pool_all_ew", _build_all_ew, _src_fingerprint("20150101"), force)
+
+
+def pool_cap_band(lo=CAP_LO, hi=CAP_HI, force: bool = False) -> pd.DataFrame:
+    """P1 100-500亿域等权（带缓存，按市值区间分文件）。口径见 _build_cap_band。"""
+    name = f"pool_cap_band_{int(lo)}_{int(hi)}"
+    fp = _src_fingerprint("20201201") + f"|cap{int(lo)}_{int(hi)}"
+    return _cached_pool(name, lambda: _build_cap_band(lo, hi), fp, force)
+
+
+def _build_cap_band(lo=CAP_LO, hi=CAP_HI) -> pd.DataFrame:
     """P1 100-500亿域等权: 每月初按当时市值筛池 → 持有到下月初（月度 buy&hold）。
 
     mktcap_cache 是**月初**快照（20210104/20210201…），不是月末 → 收益期间
@@ -422,14 +480,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="只跑 P2 全A等权")
     ap.add_argument("--force-regime", action="store_true", help="强制重建阶段序列")
+    ap.add_argument("--force-pool", action="store_true", help="强制重建池子（忽略缓存）")
     args = ap.parse_args()
 
     regime = load_regime_history(force=args.force_regime)
     print(f"[regime] 分布: {regime.value_counts().to_dict()}", file=sys.stderr)
 
-    pools = {"P2 全A等权": pool_all_equal_weight(regime)}
+    t0 = datetime.now()
+    pools = {"P2 全A等权": pool_all_equal_weight(regime, force=args.force_pool)}
     if not args.quick:
-        p1 = pool_cap_band()
+        p1 = pool_cap_band(force=args.force_pool)
         if len(p1) >= 12:
             pools["P1 100-500亿等权"] = p1
         else:
@@ -462,6 +522,8 @@ def main():
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=1)
     print(md)
+    print(f"\n⏱ 总耗时 {(datetime.now() - t0).total_seconds():.1f}s"
+          f"（池子缓存{'强制重建' if args.force_pool else '命中/构建见上'}）", file=sys.stderr)
     print(f"\n✅ {OUT_MD}\n✅ {OUT_JSON}", file=sys.stderr)
 
 
