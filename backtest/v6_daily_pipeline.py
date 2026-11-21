@@ -54,6 +54,8 @@ LOG_PATH = os.path.join(PROJECT_ROOT, "logs", "v6_pipeline.log")
 RISK_STATE_SCRIPT = os.path.join(PROJECT_ROOT, "analysis", "risk_state.py")
 RISK_STATE_CANON = os.path.join(PROJECT_ROOT, "data_storage", "risk_state.json")
 RISK_STATE_DASH = os.path.expanduser("~/projects/hermes-dashboard/risk_state.json")
+QUANT_ACTIVITY_SCRIPT = os.path.expanduser("~/projects/hermes-dashboard/collect_quant_activity.py")
+QUANT_ACTIVITY_JSON = os.path.expanduser("~/projects/hermes-dashboard/cache/quant_activity.json")
 
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 logging.basicConfig(
@@ -307,6 +309,31 @@ def compute_risk_state(asof: str, expected: str | None, stale_days: int) -> bool
         return False
 
 
+def compute_quant_activity() -> bool:
+    """生成 ⑧ 量化活跃度代理（日频），供 V6 日报/看板共用。
+
+    与 V6 同一数据日（stock_daily max）；失败不阻断日报。
+    """
+    if not os.path.exists(QUANT_ACTIVITY_SCRIPT):
+        logger.warning("⚠️ 量化活跃度采集脚本不存在: %s", QUANT_ACTIVITY_SCRIPT)
+        return False
+    try:
+        r = subprocess.run([sys.executable, QUANT_ACTIVITY_SCRIPT],
+                           cwd=os.path.dirname(QUANT_ACTIVITY_SCRIPT),
+                           capture_output=True, text=True, timeout=180)
+        for line in (r.stdout or "").splitlines():
+            if line.strip():
+                logger.info("[quant-activity] %s", line.strip())
+        if r.returncode != 0:
+            logger.warning("⚠️ 量化活跃度生成失败 (exit=%d): %s",
+                           r.returncode, (r.stderr or "").strip()[-400:])
+            return False
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("⚠️ 量化活跃度生成异常: %s", e)
+        return False
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="V6 日报生产管道")
@@ -382,6 +409,8 @@ def main():
     expected = status["stock_daily"].get("expected")
     # 风险守卫：在报告之前算一次，canonical + 看板镜像；失败不阻断日报
     compute_risk_state(db_max, expected, stale_days)
+    # 量化活跃度代理：与 V6 同一数据日；失败不阻断日报
+    compute_quant_activity()
 
     cmd = [sys.executable, script, "--asof", str(db_max),
            "--risk-state", RISK_STATE_CANON]

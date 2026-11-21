@@ -19,3 +19,6 @@ backtest/cache/pool_*.meta.json
 # 浮盈保护研究派生缓存（rb_data.py / rb_trailing.py 可重建，不入库）
 backtest/cache/rb_*.parquet
 backtest/cache/rb_*.csv
+
+# 量化活跃度代理原始缓存（quant_activity_validate.py 可重建，不入库）
+backtest/cache/quant_*.parquet

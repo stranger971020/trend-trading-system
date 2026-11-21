@@ -149,6 +149,7 @@ INDUSTRY_CSV = os.path.join(PROJECT_ROOT, "data_storage", "stock_industry_mappin
 FINAL_JSON = os.path.join(SCRIPT_DIR, "v6_final_20260801.json")
 REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports", "v6_daily")
 RISK_STATE_DEFAULT = os.path.join(PROJECT_ROOT, "data_storage", "risk_state.json")
+QUANT_ACTIVITY_DEFAULT = os.path.expanduser("~/projects/hermes-dashboard/cache/quant_activity.json")
 
 ENGINES = ["momentum", "reversion", "breakdown"]  # 注意: breakout 在模型中名为 breakout
 
@@ -807,7 +808,23 @@ def _entry_pause_note(view) -> str:
     return "（参考；新仓建议暂停）" if (not view or not view.get("ok")) else ""
 
 
-def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None):
+def load_quant_activity(path: str = QUANT_ACTIVITY_DEFAULT):
+    """读取 ⑧ 量化活跃度代理；失败不阻断日报。"""
+    if not path or not os.path.exists(path):
+        return None, f"量化活跃度文件不存在: {path}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict) or payload.get("schema") != 1:
+            return None, "量化活跃度 schema 非法"
+        if not isinstance(payload.get("market"), dict):
+            return None, "量化活跃度缺 market"
+        return payload, None
+    except Exception as e:  # noqa: BLE001
+        return None, f"量化活跃度解析失败: {e}"
+
+
+def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None, quant_activity=None):
     """生成完整 HTML"""
     rules, (lo, hi), composite = _load_rules_config()
     n_folds_meta = _rules_n_folds()
@@ -913,6 +930,29 @@ def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp
       </div>
       <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569">
         > {rl['advice']}
+      </div>
+    </div>"""
+
+    # ── 量化活跃度代理（A 方案；不是成交占比）──
+    quant_html = ""
+    if quant_activity:
+        qm = quant_activity.get("market") or {}
+        _top = quant_activity.get("top_industries") or []
+        _qasof = quant_activity.get("asof", "—")
+        _lag = "" if str(_qasof) == str(report_date) else f" · A基准 {_qasof}"
+        _top_txt = "、".join(
+            f"{x.get('name', '—')}({x.get('score_pct', 0):.0f})" for x in _top[:3])
+        quant_html = f"""
+    <div class="section">
+      <div class="section-title">📡 量化活跃度（代理） <span style="font-weight:400;color:#94a3b8">(不是成交占比)</span></div>
+      <div style="font-size:.9rem;color:#334155">
+        市场 <b>{qm.get('score', '—')}/100</b> · 微盘 <b>{qm.get('micro_score', '—')}</b>
+        · 大盘 <b>{qm.get('large_score', '—')}</b> · spread <b>{qm.get('spread_score', '—')}/100</b>
+        <span style="color:#94a3b8">· asof {_qasof}{_lag}</span>
+      </div>
+      <div style="font-size:.82rem;color:#64748b;margin-top:6px">Top 行业: {_top_txt or '—'}</div>
+      <div style="font-size:.78rem;color:#94a3b8;margin-top:6px">
+        代理 = 换手/振幅/日内/小单占比合成；高分=更像高频/量化活跃，<b>不是量化持仓或成交占比</b>。
       </div>
     </div>"""
 
@@ -1482,6 +1522,7 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
 {conclusion_html}
 {danger_html}
 {risk_html}
+{quant_html}
 {temp_html}
 {emotion_html}
 {preplan_html}
@@ -1549,7 +1590,7 @@ def _structure_telegram(lines: list[str]) -> list[str]:
             head.append(ln)
             continue
         # 总览
-        if s.startswith(("🧭", "🛡", "①", "🚪", "📌")):
+        if s.startswith(("🧭", "🛡", "①", "🚪", "📡", "📌")):
             total.append(ln)
             continue
         # 一、大盘
@@ -1585,7 +1626,7 @@ def _structure_telegram(lines: list[str]) -> list[str]:
         {"market": market, "industry": industry, "stocks": stocks,
          "exec": execu}.get(cur, market).append(ln)
 
-    order = {"🧭": 0, "🛡": 1, "①": 2, "🚪": 3, "📌": 4}
+    order = {"🧭": 0, "🛡": 1, "①": 2, "🚪": 3, "📡": 4, "📌": 5}
     total.sort(key=lambda x: next(
         (v for k, v in order.items() if x.strip().startswith(k)), 9))
     eorder = {"④": 0, "⑤": 1, "📈 影子实盘": 2, "🧪": 3, "📄": 4}
@@ -1616,7 +1657,7 @@ def _structure_telegram(lines: list[str]) -> list[str]:
     return out
 
 
-def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None):
+def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None, risk_guard=None, quant_activity=None):
     """生成 Telegram 推送消息"""
     rules, (lo, hi), _ = _load_rules_config()
     temp = temp_info["temp"]
@@ -1672,6 +1713,15 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
         lines.append(f"📊 大盘风险: {risk_info['label']}（{risk_info['score']}/6）· 触发: {('、'.join(risk_info['active_signals']) or '无')}")
     # 防守层：已有浮盈仓（与上面的大盘风险诊断分开）
     lines.extend(_guard_tg_lines(risk_guard))
+    if quant_activity:
+        _qm = quant_activity.get("market") or {}
+        _qa_asof = quant_activity.get("asof", "—")
+        _qa_lag = "" if str(_qa_asof) == str(report_date) else f"（A基准 {_qa_asof}）"
+        lines.append(
+            f"📡 量化活跃度(代理): 市场 {_qm.get('score', '—')}/100 · "
+            f"微盘 {_qm.get('micro_score', '—')} · 大盘 {_qm.get('large_score', '—')} · "
+            f"spread {_qm.get('spread_score', '—')}/100{_qa_lag}"
+            f"（不是量化持仓/成交占比）")
 
     # 盘中预案（T-1 条件触发器, 2026-08-19 新增; 非预测"明天会跌", 而是盘中确认后的行动触发器）
     if preplan_info:
@@ -2055,11 +2105,22 @@ def main():
     else:
         print(f"⚠️ 浮盈保护不可用: {'；'.join(risk_guard.get('warnings') or [])}", file=sys.stderr)
 
+    # ── 量化活跃度代理（A；与 V6 同一数据日）──
+    quant_activity, _qa_err = load_quant_activity()
+    if quant_activity:
+        _qm = quant_activity.get("market") or {}
+        print(f"📡 量化活跃度代理: asof {quant_activity.get('asof')} · "
+              f"市场 {_qm.get('score')}/100 · 微盘 {_qm.get('micro_score')} · "
+              f"大盘 {_qm.get('large_score')} · spread {_qm.get('spread_score')}/100",
+              file=sys.stderr)
+    else:
+        print(f"⚠️ 量化活跃度不可用: {_qa_err}", file=sys.stderr)
+
     # ── 生成 HTML ──
     html = generate_html(trading_date, next_date, feat_date, price_date, model_ver,
                          temp_info, decay_info, temp_info["regime"], danger_info, stale_days, risk_info, preplan_info,
                          emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info,
-                         risk_guard=risk_guard)
+                         risk_guard=risk_guard, quant_activity=quant_activity)
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
     html_path = os.path.join(REPORTS_DIR, f"v6_daily_{trading_date}.html")
@@ -2098,6 +2159,7 @@ def main():
             "index_risk": risk_info,
             "risk_guard": risk_guard,
             "risk_guard_error": _guard_err,
+            "quant_activity": quant_activity,
             "emotion": emotion_info,
             "wave": wave_info,
             "mainline": mainline_info,
@@ -2139,7 +2201,7 @@ def main():
         _msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info,
                                      danger_info, stale_days, risk_info, preplan_info,
                                      emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info,
-                                     risk_guard=risk_guard)
+                                     risk_guard=risk_guard, quant_activity=quant_activity)
         print("\n" + "═" * 30 + " Telegram 消息预览 " + "═" * 30)
         print(_msg)
         print("═" * 76 + "\n")
@@ -2161,7 +2223,7 @@ def main():
         else:
             try:
                 from notify.telegram_sender import send_single_message
-                msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info, risk_guard=risk_guard)
+                msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info, risk_guard=risk_guard, quant_activity=quant_activity)
                 ok = send_single_message(msg, parse_mode="HTML")
                 if ok:
                     print("✅ Telegram 已推送", file=sys.stderr)
