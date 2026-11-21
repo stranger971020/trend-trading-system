@@ -15,6 +15,9 @@ v6_daily_report.py — V6 每日交易日报
 输出路径: reports/v6_daily/v6_daily_YYYYMMDD.html
 
 ── Changelog ──
+# 2026-11-06 Hermes: 🏛️国家队雷达 section（HTML+TG同源）— compute_national_team()
+#   平准基金进出场信号(ETF份额×点位×杠杆交叉验证), try/except不阻塞日报;
+#   数据层=data_refresh L6步骤(national_team_updater); 详见 analysis/national_team.py
 # 2026-09-25 Hermes: 接入波段决策单 → 报告"择优合并"(非追加/非替换)
 #   · 去重: 「推断Regime」→ ①阶段(业内标准口径 技术性牛熊±20% + 年线/半年线 + 实证超额)
 #           「🎯主线(选池)」→ ②行业(阶段自适应臂)
@@ -96,6 +99,7 @@ v6_daily_report.py — V6 每日交易日报
 #               ② analysis/shadow_portfolio.py: 回测归因(引擎/Regime/PWin校准)+实盘影子组合(JSONL 前向跟踪)
 #                  momentum D+5 51.5%/+1.95% vs reversion 45.4%/+0.37%; PWin≥0.75 实胜率 51.1%(单调校准)
 #               契约: generate_html/generate_telegram_msg 追加末尾位置参数 emotion_info/attr_info/shadow_info=None, 向后兼容
+# 2026-10-09 Hermes: 情绪段新增双轴展示 (hot_score 热度/反向, panic_score 恐慌/正向)。纯展示, 不改 emo_score。
 #               产物: data_storage/shadow_portfolio_log.jsonl (幂等, 同日不重复记录)
 # 2026-09-25 Hermes: 新增第③段 — 🌊 主升浪雷达(波段层), 面向用户"抓主升浪"交易风格
 #               analysis/market_wave.py: ZigZag 摆动识别主升浪 + 当前状态判定(进行中/中·回调/初期/底部/回调)
@@ -737,7 +741,7 @@ def compute_card(asof):
         return None
 
 
-def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None):
+def generate_html(report_date, next_date, feat_date, price_date, model_ver, temp_info, decay_info, current_regime, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None):
     """生成完整 HTML"""
     rules, (lo, hi), composite = _load_rules_config()
     n_folds_meta = _rules_n_folds()
@@ -1156,6 +1160,66 @@ function filterIndustry() {{
       </div>
     </div>"""
 
+    # ── 🏛️ 国家队雷达（平准基金进出场信号, 2026-11-06 Hermes 新增）──
+    team_html = ""
+    if team_info and team_info.get("verdict") != "NO_DATA":
+        _t = team_info
+        _tv_map = {
+            "EXIT": ("🔴", "离场信号", "#dc2626"),
+            "ENTRY": ("🟢", "入场信号", "#16a34a"),
+            "ROTATE": ("🔄", "调仓换股(非离场)", "#f59e0b"),
+            "NEUTRAL": ("⚪", "中性/无明确信号", "#64748b"),
+        }
+        _t_icon, _t_label, _t_color = _tv_map.get(_t["verdict"], ("❓", _t["verdict"], "#94a3b8"))
+        _flow = _t.get("l1_etf_flow") or {}
+        _rows = ""
+        for code, v in ( (_c, _v) for _c, _v in (_flow.get("core") or {}).items() ):
+            _in = v["streak_in"]; _out = v["streak_out"]
+            if _in >= 3:
+                _sig, _sc = f"申购{_in}连", "#16a34a"
+            elif _out >= 3:
+                _sig, _sc = f"赎回{_out}连", "#dc2626"
+            else:
+                _sig, _sc = "—", "#94a3b8"
+            _z = v["last_zscore"]
+            _zt = f"{_z:+.1f}σ" if abs(_z) > 2 else f"{_z:+.1f}"
+            _zc = "#dc2626" if (_z is not None and _z < -2) else ("#16a34a" if (_z is not None and _z > 2) else "#475569")
+            _rows += (f"<tr><td>{v['name']}</td>"
+                      f"<td style='color:{_sc};font-weight:600'>{_sig}</td>"
+                      f"<td style='color:{_zc}'>{_zt}</td>"
+                      f"<td style='color:{'#dc2626' if v.get('pct_move', 0) <= -1.0 else ('#16a34a' if v.get('pct_move', 0) >= 1.0 else '#94a3b8')}'>{v.get('pct_window', 3)}日 {v.get('pct_move', 0):+.1f}%</td></tr>")
+        _sec = _flow.get("sector") or {}
+        _sec_in = [v["name"] for v in _sec.values() if v["streak_in"] >= 2]
+        _idx = _t.get("l2_index_context") or {}
+        _mg = _t.get("l3_margin_context") or {}
+        _pos = _idx.get("pos_in_60d_range_pct")
+        _zone = "低位区" if (_pos is not None and _pos < 30) else ("高位区" if (_pos is not None and _pos > 70) else "中位区")
+        _mg_trend = "升" if (_mg.get("chg_5d_pct", 0) > 0.5) else ("降" if (_mg.get("chg_5d_pct", 0) < -0.5) else "平")
+        _rc = _flow.get("rotate_check") or {}
+        _rc_line = ""
+        if _rc.get("core_out_amt_wan"):
+            _rc_line = ("▸ 调仓校验: 行业申购 "
+                        f"{_rc.get('sector_in_amt_wan', 0)/1e4:.1f}亿 ÷ 宽基赎回 "
+                        f"{_rc.get('core_out_amt_wan', 0)/1e4:.1f}亿 = "
+                        f"{(_rc.get('ratio') or 0)*100:.0f}%（阈值{_rc.get('threshold', 0.5)*100:.0f}%）"
+                        f" → {'调仓特征' if (_rc.get('ratio') or 0) >= _rc.get('threshold', 0.5) else '非调仓'}<br>")
+        team_html = f"""
+    <div class="section">
+      <div class="section-title">🏛️ 国家队雷达 <span style="font-weight:400;color:#94a3b8">(平准基金进出场 · ETF份额×点位×杠杆交叉验证 · 数据截至 {_t.get('asof_date', '—')})</span></div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="font-size:1.5rem;font-weight:800;color:{_t_color}">{_t_icon} {_t_label}</div>
+        <div style="font-size:.9rem;color:#64748b">置信度: <b>{_t.get('confidence', '—')}</b></div>
+      </div>
+      <table class="data-table"><thead><tr><th>核心宽基ETF</th><th>申赎方向(连续日)</th><th>单日偏离(20日基线)</th><th>累计幅度(份额%)</th></tr></thead>
+      <tbody>{_rows}</tbody></table>
+      <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569;line-height:1.8">
+        ▸ 行业ETF对冲申购≥3日: <b>{('、'.join(_sec_in)) if _sec_in else '无'}</b>（有→调仓特征, 非离场）<br>
+        {_rc_line}
+        ▸ 沪深300 <b>{_idx.get('close', '—')}</b> | 60日区间 {(_pos if _pos is not None else '—')}% ({_zone}) | 5日 {_idx.get('chg_5d_pct', '—')}%<br>
+        ▸ 融资余额 <b>{_mg.get('rzye_latest_yi', '—')}</b>亿 | 5日{_mg_trend}({_mg.get('chg_5d_pct', '—')}%)
+      </div>
+    </div>"""
+
     # ── A股情绪周期（市场结构层，2026-09-25 Hermes 新增）──
     emotion_html = ""
     if emotion_info:
@@ -1182,6 +1246,10 @@ function filterIndustry() {{
         <span>连板家数 <b>{e.get('multi_board')}</b></span>
         <span>晋级率 <b>{_pr}</b></span>
         <span>涨/跌 <b>{e.get('up_count')}/{e.get('down_count')}</b> 比 {_ur}</span>
+      </div>
+      <div class="dashboard-row" style="margin-top:6px">
+        <span>热度轴 <b>{e.get('hot_score')}</b> <span style="color:#94a3b8;font-size:.72rem">(反向: 高→未来偏弱; 近半样本已衰减)</span></span>
+        <span>恐慌轴 <b>{e.get('panic_score')}</b> <span style="color:#94a3b8;font-size:.72rem">(正向: 恐慌→超跌反弹, IC+0.09 · 77% fold 稳)</span></span>
       </div>
       <div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:.85rem;color:#475569">
         &gt; {e.get('advice', '')}
@@ -1347,6 +1415,7 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
 {card_html}
 {wave_html}
 {mainline_html}
+{team_html}
 {temp_html}
 {emotion_html}
 {decay_html}
@@ -1366,7 +1435,7 @@ body{{font-family:-apple-system,'PingFang SC','Helvetica Neue',system-ui,sans-se
     return html
 
 
-def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None):
+def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_info=None, stale_days=0, risk_info=None, preplan_info=None, emotion_info=None, attr_info=None, shadow_info=None, wave_info=None, mainline_info=None, card_info=None, team_info=None):
     """生成 Telegram 推送消息"""
     rules, (lo, hi), _ = _load_rules_config()
     temp = temp_info["temp"]
@@ -1431,6 +1500,33 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
         _w = " · ".join(f"{x['name']}{x['status']}" for x in wave_info["states"])
         lines.append(f"🌊 主升浪: {_w}")
 
+    # 🏛️ 国家队雷达（平准基金进出场, 2026-11-06 Hermes 新增）
+    if team_info and team_info.get("verdict") != "NO_DATA":
+        _tv = {"EXIT": ("🔴", "离场"), "ENTRY": ("🟢", "入场"),
+               "ROTATE": ("🔄", "调仓(非离场)"), "NEUTRAL": ("⚪", "中性")}
+        _t_ic, _t_lb = _tv.get(team_info["verdict"], ("❓", team_info["verdict"]))
+        lines.append(f"🏛️ 国家队: {_t_ic} {_t_lb} (置信度 {team_info.get('confidence', '—')})")
+        if team_info["verdict"] != "NEUTRAL":
+            _core = team_info.get("l1_etf_flow", {}).get("core") or {}
+            _hits_in = [v["name"] for v in _core.values()
+                        if v["streak_in"] >= 3 and v.get("pct_move", 0) >= 1.0]
+            _hits_out = [v["name"] for v in _core.values()
+                         if v["streak_out"] >= 3 and v.get("pct_move", 0) <= -1.0]
+            _detail = []
+            if _hits_in:
+                _detail.append(f"申购≥3日 {len(_hits_in)}只")
+            if _hits_out:
+                _detail.append(f"赎回≥3日 {len(_hits_out)}只")
+            _idxc = team_info.get("l2_index_context") or {}
+            if _idxc.get("pos_in_60d_range_pct") is not None:
+                _p = _idxc["pos_in_60d_range_pct"]
+                _detail.append(f"300点位{_p:.0f}%位")
+            _rcc = team_info.get("l1_etf_flow", {}).get("rotate_check") or {}
+            if _rcc.get("ratio") is not None:
+                _detail.append(f"调仓比{_rcc['ratio']*100:.0f}%")
+            if _detail:
+                lines.append(f"　{' · '.join(_detail)}（详见HTML）")
+
     # ② 行业选择（阶段自适应臂, 2026-09-25 Hermes 整合）
     #    实测(backtest/report_signal_compare): 旧「主线」单独用超额仅+0.39%, 而
     #    全行业+2.46% / 震荡期「主线∩热度带」+2.88% / 过热期「主线」+2.77% → 按阶段自适应
@@ -1464,6 +1560,7 @@ def generate_telegram_msg(report_date, next_date, temp_info, decay_info, danger_
         e = emotion_info
         lines.append(f"🎭 情绪: {e['emo_score']}/100 {e['phase']} · 涨停{e['limit_up']}/跌停{e['limit_down']} "
                      f"· 最高{e['max_streak']}板 · 晋级{(e['promotion_rate'] or 0)*100:.0f}%")
+        lines.append(f"　 双轴: 热度{e.get('hot_score')}(反向) · 恐慌{e.get('panic_score')}(见底)")
 
     if decay_info:
         ranking = decay_info["ranking"]
@@ -1673,6 +1770,18 @@ def main():
     except Exception as e:
         print(f"⚠️ 主线雷达失败: {_redact(str(e))}", file=sys.stderr)
 
+    # ── 🏛️ 国家队雷达（平准基金进出场信号, 2026-11-06 Hermes 新增）──
+    team_info = None
+    try:
+        from analysis.national_team import compute_national_team as _nt_compute
+        team_info = _nt_compute(trading_date)
+        if team_info and team_info.get("verdict") != "NO_DATA":
+            print(f"🏛️ 国家队雷达: {team_info['verdict']} (置信度 {team_info['confidence']})", file=sys.stderr)
+        else:
+            print("ℹ️ 国家队雷达: 数据不足, 跳过", file=sys.stderr)
+    except Exception as e:
+        print(f"⚠️ 国家队雷达失败(不阻塞日报): {_redact(str(e))}", file=sys.stderr)
+
     # ── 影子组合：记录当日建议 + 策略归因（复盘层, 2026-09-25 Hermes 新增）──
     attr_info = shadow_info = None
     try:
@@ -1699,13 +1808,57 @@ def main():
     # ── 生成 HTML ──
     html = generate_html(trading_date, next_date, feat_date, price_date, model_ver,
                          temp_info, decay_info, temp_info["regime"], danger_info, stale_days, risk_info, preplan_info,
-                         emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info)
+                         emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
     html_path = os.path.join(REPORTS_DIR, f"v6_daily_{trading_date}.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"✅ HTML: {html_path}", file=sys.stderr)
+
+    # ── 结构化摘要 JSON（2026-11-21 Hermes）—— 跨系统消费契约 ──
+    #    用途: hermes-dashboard 个人投资看板读此文件渲染「V6 交易决策」段；
+    #          下游不再解析 ~1MB HTML（HTML 版式一改就断）。
+    #    契约: schema=1；字段缺失写 null 不省略；写盘失败只 warn, 不阻断日报/推送。
+    #    消费方: hermes-dashboard/quant_ratio_render.py::render_module_v6() + verify_quant.py
+    #    可见性: 本地产物, 不进公开仓库（.gitignore 排除 reports/v6_daily/*.json），
+    #            HTML 已公开的信息才被看板引用, 不新增暴露面。
+    try:
+        _rules_json, (_lo, _hi), _compo = _load_rules_config()
+        _rk = (str(temp_info.get("regime") or ""), str(temp_info.get("level") or ""))
+        _hit = _rules_json[_rk] if _rk in _rules_json else None
+        _size_lbl, _t1, _d5 = (_hit[0], _hit[1], _hit[2]) if _hit else ("—", None, None)
+        summary = {
+            "schema": 1,
+            "trading_date": trading_date,
+            "next_date": next_date,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "model_ver": model_ver,
+            "feat_date": feat_date,
+            "price_date": price_date,
+            "stale_days": stale_days,
+            "links": {"html": f"{GITHUB_BASE}/v6_daily_{trading_date}.html",
+                      "local_html": html_path},
+            "temperature": {k: temp_info.get(k) for k in
+                            ("temp", "level", "regime", "gate_proxy", "wp_median", "n_stocks")},
+            "position": {"size": _size_lbl, "hist_t1": _t1, "hist_d5": _d5,
+                         "bands": {"low": _lo, "high": _hi}, "formula": _compo},
+            "danger": danger_info,
+            "index_risk": risk_info,
+            "emotion": emotion_info,
+            "wave": wave_info,
+            "mainline": mainline_info,
+            "national_team": team_info,
+            "decision_card": card_info,
+            "attribution": attr_info,
+            "shadow": shadow_info,
+        }
+        json_path = os.path.join(REPORTS_DIR, f"v6_daily_{trading_date}.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=1, default=str)
+        print(f"✅ SUMMARY: {json_path}", file=sys.stderr)
+    except Exception as _e:  # noqa: BLE001
+        print(f"⚠️ 摘要 JSON 导出失败(不阻塞日报): {_redact(str(_e))}", file=sys.stderr)
 
     # ── Deploy（先部署，2026-08-06: 等部署成功后再推 Telegram，保证 TG 链接可用）──
     # 2026-09-15 Claude: 新增 push_failed 跟踪 + 出口非零（见文件尾 sys.exit）
@@ -1732,7 +1885,7 @@ def main():
     if args.print_msg:
         _msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info,
                                      danger_info, stale_days, risk_info, preplan_info,
-                                     emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info)
+                                     emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
         print("\n" + "═" * 30 + " Telegram 消息预览 " + "═" * 30)
         print(_msg)
         print("═" * 76 + "\n")
@@ -1745,7 +1898,7 @@ def main():
                 print("⚠️ GitHub Pages 部署超时/失败，仍推送 Telegram（链接可能延迟）", file=sys.stderr)
         try:
             from notify.telegram_sender import send_single_message
-            msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info)
+            msg = generate_telegram_msg(trading_date, next_date, temp_info, decay_info, danger_info, stale_days, risk_info, preplan_info, emotion_info, attr_info, shadow_info, wave_info, mainline_info, card_info, team_info)
             ok = send_single_message(msg, parse_mode="HTML")
             if ok:
                 print("✅ Telegram 已推送", file=sys.stderr)

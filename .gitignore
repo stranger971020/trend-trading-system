@@ -8,3 +8,6 @@ __pycache__/
 venv/
 .DS_Store
 .reports/
+
+# V6 日报结构化摘要 JSON（本地跨系统消费，不公开）
+reports/v6_daily/*.json
